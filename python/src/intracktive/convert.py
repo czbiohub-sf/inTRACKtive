@@ -18,6 +18,7 @@ from skimage.util._map_array import ArrayMap
 
 REQUIRED_COLUMNS = ["track_id", "t", "z", "y", "x", "parent_track_id"]
 INF_SPACE = -9999.9
+VALID_ATTRIBUTE_TYPES = ["continuous", "categorical", "hex"]
 
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.INFO)
@@ -304,6 +305,14 @@ def convert_dataframe_to_zarr(
         attribute_types = [get_col_type(df[c]) for c in extra_cols]
     LOG.info("column types: %s", attribute_types)
 
+    # Validate attribute types
+    invalid_types = [t for t in attribute_types if t not in VALID_ATTRIBUTE_TYPES]
+    if invalid_types:
+        raise ValueError(
+            f"Invalid attribute type(s): {invalid_types}. "
+            f"Valid types are: {VALID_ATTRIBUTE_TYPES}"
+        )
+
     start = time.monotonic()
 
     n_time_points = len(df["t"].unique())
@@ -318,9 +327,9 @@ def convert_dataframe_to_zarr(
     )
 
     # relabeling from 0 to N-1
-    df.loc[:, "track_id"] = fwd_map[df["track_id"].to_numpy()]
+    df.loc[:, "track_id"] = fwd_map[df["track_id"].to_numpy(copy=True)]
     # orphaned are set to 0 according to skimage convention
-    df.loc[:, "parent_track_id"] = fwd_map[df["parent_track_id"].to_numpy()]
+    df.loc[:, "parent_track_id"] = fwd_map[df["parent_track_id"].to_numpy(copy=True)]
 
     n_tracklets = df["track_id"].nunique()
     # (z, y, x) + extra_cols
@@ -362,6 +371,22 @@ def convert_dataframe_to_zarr(
         points_ids = t_idx * max_values_per_time_point + np.arange(group_size)
 
         points_to_tracks[points_ids, group["track_id"] - 1] = 1
+
+    # Encode string categorical columns to integers
+    string_mappings = {}
+    for col in extra_cols:
+        if pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(
+            df[col]
+        ):
+            # Check if actually contains strings
+            if df[col].dropna().apply(lambda x: isinstance(x, str)).any():
+                LOG.info(f"Encoding string column '{col}' to integers")
+                # Convert to categorical and get codes
+                df[col] = df[col].astype("category")
+                string_mappings[col] = {
+                    i: cat for i, cat in enumerate(df[col].cat.categories)
+                }
+                df[col] = df[col].cat.codes.astype(float)
 
     for col in extra_cols:
         attribute_array = attribute_array_empty.copy()
@@ -503,6 +528,8 @@ def convert_dataframe_to_zarr(
         attributes.attrs["pre_normalized"] = (
             True  # Always True since normalization is handled here
         )
+        if string_mappings:
+            attributes.attrs["string_mappings"] = string_mappings
 
     mean = df[["z", "y", "x"]].mean()
     extent = (df[["z", "y", "x"]] - mean).abs().max()
@@ -578,36 +605,59 @@ def zarr_to_browser(
     """
     zarr_dir = zarr_path.parent
 
-    # Calculate URLs before starting server
-    host = DEFAULT_HOST
-    port = find_available_port(8000)
-    hostURL = f"http://{host}:{port}"
-    baseUrl = "https://intracktive.sf.czbiohub.org"  # inTRACKtive application
-    dataUrl = (
-        hostURL + "/" + zarr_path.name + "/"
-    )  # exact path of the data (on localhost)
-    fullUrl = baseUrl + generate_viewer_state_hash(
-        data_url=str(dataUrl)
-    )  # full hash that encodes viewerState
-
-    LOG.info("Copy the following URL into the Google Chrome browser:")
-    LOG.info("full URL: %s", fullUrl)
-
-    # Open browser before starting server if not threaded
-    if flag_open_browser and not threaded:
-        webbrowser.open(fullUrl)
-
-    # Start server
-    serve_directory(
-        path=zarr_dir,
-        host=host,
-        port=port,
-        threaded=threaded,
+    # Check if a bundled frontend is available (packaged alongside the Python code).
+    # When available, we serve it from a local HTTP server so that the browser can
+    # load both the app and the Zarr data over HTTP.  This avoids the mixed-content
+    # block that Safari (and strict HTTPS contexts) enforce when an HTTPS page tries
+    # to fetch resources from an HTTP localhost server.
+    frontend_path = Path(__file__).parent / "frontend"
+    use_local_frontend = (
+        frontend_path.exists() and (frontend_path / "index.html").exists()
     )
 
-    # Open browser after starting server if threaded
-    if flag_open_browser and threaded:
-        webbrowser.open(fullUrl)
+    # Calculate URLs before starting servers
+    host = DEFAULT_HOST
+    data_port = find_available_port(8000)
+    dataUrl = f"http://{host}:{data_port}/{zarr_path.name}/"
+
+    if use_local_frontend:
+        frontend_port = find_available_port(data_port + 1)
+        baseUrl = f"http://{host}:{frontend_port}"
+    else:
+        # Fall back to the externally-hosted HTTPS app.
+        # NOTE: this does not work in Safari due to mixed-content restrictions.
+        baseUrl = "https://intracktive.sf.czbiohub.org"
+
+    fullUrl = baseUrl + generate_viewer_state_hash(data_url=str(dataUrl))
+
+    LOG.info("Copy the following URL into your browser:")
+    LOG.info("full URL: %s", fullUrl)
+
+    if use_local_frontend:
+        # Data server always runs in the background; the frontend server controls blocking.
+        serve_directory(path=zarr_dir, host=host, port=data_port, threaded=True)
+
+        # Open browser before blocking frontend server (when not threaded)
+        if flag_open_browser and not threaded:
+            webbrowser.open(fullUrl)
+
+        serve_directory(
+            path=frontend_path, host=host, port=frontend_port, threaded=threaded
+        )
+
+        # Open browser after frontend server starts (when threaded)
+        if flag_open_browser and threaded:
+            webbrowser.open(fullUrl)
+    else:
+        # Open browser before starting the (blocking) server
+        if flag_open_browser and not threaded:
+            webbrowser.open(fullUrl)
+
+        serve_directory(path=zarr_dir, host=host, port=data_port, threaded=threaded)
+
+        # Open browser after server starts (when threaded)
+        if flag_open_browser and threaded:
+            webbrowser.open(fullUrl)
 
     if not flag_open_browser:
         return dataUrl, fullUrl
