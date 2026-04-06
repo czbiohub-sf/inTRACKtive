@@ -129,24 +129,28 @@ export default function App() {
 
                     canvas.fetchedRootTrackIds.add(trackId);
 
-                    const lineagePromise = trackManager.fetchLineageForTrack(trackId).then(async ([lineage, trackData]) => {
-                        const relatedTrackPromises: Promise<void>[] = [];
+                    const lineagePromise = trackManager
+                        .fetchLineageForTrack(trackId)
+                        .then(async ([lineage, trackData]) => {
+                            const relatedTrackPromises: Promise<void>[] = [];
 
-                        for (const [index, relatedTrackId] of lineage.entries()) {
-                            if (canvas.tracks.has(relatedTrackId)) continue;
+                            for (const [index, relatedTrackId] of lineage.entries()) {
+                                if (canvas.tracks.has(relatedTrackId)) continue;
 
-                            const pointsPromise = trackManager.fetchPointsForTrack(relatedTrackId).then(([pos, ids]) => {
-                                // adding the track *in* the dispatcher creates issues with duplicate fetching
-                                // but we refresh so the selected/loaded count is updated
-                                canvas.addTrack(relatedTrackId, pos, ids, trackData[index]);
-                                dispatchCanvas({ type: ActionType.REFRESH });
-                            });
+                                const pointsPromise = trackManager
+                                    .fetchPointsForTrack(relatedTrackId)
+                                    .then(([pos, ids]) => {
+                                        // adding the track *in* the dispatcher creates issues with duplicate fetching
+                                        // but we refresh so the selected/loaded count is updated
+                                        canvas.addTrack(relatedTrackId, pos, ids, trackData[index]);
+                                        dispatchCanvas({ type: ActionType.REFRESH });
+                                    });
 
-                            relatedTrackPromises.push(pointsPromise);
-                        }
+                                relatedTrackPromises.push(pointsPromise);
+                            }
 
-                        await Promise.allSettled(relatedTrackPromises);
-                    });
+                            await Promise.allSettled(relatedTrackPromises);
+                        });
 
                     lineagePromises.push(lineagePromise);
                 }
