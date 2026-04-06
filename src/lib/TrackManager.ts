@@ -177,7 +177,7 @@ export class TrackManager {
     scaleSettings: ScaleSettings;
     defaultExtent: number;
     ndim: number;
-    annotTime: number;
+    annotTime: number | null;
 
     constructor(
         store: string,
@@ -188,7 +188,7 @@ export class TrackManager {
         attributes: ZarrArray,
         attributeOptions: Option[],
         scaleSettings: ScaleSettings,
-        annotTime: number,
+        annotTime: number | null,
     ) {
         this.store = store;
         this.points = points;
@@ -356,7 +356,7 @@ export async function loadTrackManager(url: string) {
         const tracksToTracks = await openSparseZarrArray(url, "tracks_to_tracks", true);
 
         let attributes = null;
-        let annotTime = 0;
+        let annotTime: number | null = null;
         let attributeOptions: Option[] = resetDropDownOptions();
         try {
             attributes = await openArray({
@@ -368,7 +368,7 @@ export async function loadTrackManager(url: string) {
             console.debug("attribute names found: %s", zattrs["attribute_names"]);
             console.debug("attribute types found: %s", zattrs["attribute_types"]);
 
-            annotTime = zattrs["annot_time"] ?? 0;
+            annotTime = zattrs["annot_time"] ?? null;
             console.debug("annotTime:", annotTime);
             for (let column = 0; column < zattrs["attribute_names"].length; column++) {
                 addDropDownOption(attributeOptions, {

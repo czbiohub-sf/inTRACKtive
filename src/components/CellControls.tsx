@@ -1,4 +1,4 @@
-import { Box, Stack } from "@mui/material";
+import { Box, Stack, Tooltip } from "@mui/material";
 import { InputSlider, SegmentedControl, SingleButtonDefinition, Button } from "@czi-sds/components";
 import { FontS, SmallCapsButton, ControlLabel } from "@/components/Styled";
 import { PointSelectionMode } from "@/lib/PointSelector";
@@ -42,6 +42,7 @@ export default function CellControls(props: CellControlsProps) {
 
     const handleBinarySelection = async () => {
         if (!props.trackManager) return;
+        if (props.trackManager.annotTime === null) return;
 
         try {
             const points = await props.trackManager.fetchPointsAtTime(props.trackManager.annotTime);
@@ -87,9 +88,24 @@ export default function CellControls(props: CellControlsProps) {
                 props.colorBy &&
                 props.colorByEvent.type === "hex-binary" &&
                 (props.numSelectedCells ?? 0) == 0 && (
-                    <Button sdsStyle="square" sdsType="primary" onClick={handleBinarySelection}>
-                        Load tracks for annotated cells
-                    </Button>
+                    <Tooltip
+                        title={
+                            props.trackManager.annotTime === null
+                                ? "annot_time not set in zarr attributes — cannot select annotated cells"
+                                : ""
+                        }
+                    >
+                        <span>
+                            <Button
+                                sdsStyle="square"
+                                sdsType="primary"
+                                onClick={handleBinarySelection}
+                                disabled={props.trackManager.annotTime === null}
+                            >
+                                Load tracks for annotated cells
+                            </Button>
+                        </span>
+                    </Tooltip>
                 )}
 
             {/* Selection mode buttons */}
