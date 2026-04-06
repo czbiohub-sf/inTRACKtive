@@ -40,32 +40,13 @@ export default function CellControls(props: CellControlsProps) {
         { icon: "Globe", tooltipText: "Adjustable sphere", value: PointSelectionMode.SPHERE },
     ];
 
-    const handleBinarySelection = async () => {
+    const attributeIndex = props.colorByEvent.label - numberOfDefaultColorByOptions;
+
+    const handleBinarySelection = () => {
         if (!props.trackManager) return;
-        if (props.trackManager.annotTime === null) return;
-
-        try {
-            const points = await props.trackManager.fetchPointsAtTime(props.trackManager.annotTime);
-            const attributeIndex = props.colorByEvent.label - numberOfDefaultColorByOptions;
-            const attributes = await props.trackManager.fetchAttributesAtTime(
-                props.trackManager.annotTime,
-                attributeIndex,
-            );
-
-            const numPoints = points.length / 3;
-
-            const selectedIds = new Set<number>();
-            for (let i = 0; i < numPoints && i < attributes.length; i++) {
-                if (attributes[i] != 4210752) {
-                    const pointId = props.trackManager.annotTime * props.trackManager.maxPointsPerTimepoint + i;
-                    selectedIds.add(pointId);
-                }
-            }
-
-            props.onSelectBinaryValue(selectedIds);
-        } catch (error) {
-            console.error("Error during binary selection:", error);
-        }
+        const pointIds = props.trackManager.annotPointIds?.[attributeIndex];
+        if (!pointIds || pointIds.length === 0) return;
+        props.onSelectBinaryValue(new Set(pointIds));
     };
 
     return (
@@ -90,8 +71,8 @@ export default function CellControls(props: CellControlsProps) {
                 (props.numSelectedCells ?? 0) == 0 && (
                     <Tooltip
                         title={
-                            props.trackManager.annotTime === null
-                                ? "annot_time not set in zarr attributes — cannot select annotated cells"
+                            !props.trackManager.annotPointIds
+                                ? "Run add_annotations.py on this zarr to enable this feature"
                                 : ""
                         }
                     >
@@ -100,7 +81,7 @@ export default function CellControls(props: CellControlsProps) {
                                 sdsStyle="square"
                                 sdsType="primary"
                                 onClick={handleBinarySelection}
-                                disabled={props.trackManager.annotTime === null}
+                                disabled={!props.trackManager.annotPointIds}
                             >
                                 Load tracks for annotated cells
                             </Button>
