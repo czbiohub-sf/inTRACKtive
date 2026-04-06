@@ -1,9 +1,11 @@
 import {
     AxesHelper,
+    BufferAttribute,
     BufferGeometry,
     Color,
     Float32BufferAttribute,
     FogExp2,
+    InterleavedBufferAttribute,
     NormalBlending,
     PerspectiveCamera,
     Points,
@@ -23,10 +25,21 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { Track } from "@/lib/three/Track";
 import { PointSelector, PointSelectionMode } from "@/lib/PointSelector";
 import { ViewerState } from "./ViewerState";
-import { numberOfValuesPerPoint } from "./TrackManager";
+import { numberOfValuesPerPoint, Option, DEFAULT_DROPDOWN_OPTION } from "./TrackManager";
+import { colormaps } from "@/lib/Colormaps";
 
+import deviceState from "./DeviceState.ts";
 import config from "../../CONFIG.ts";
 const initialPointSize = config.settings.point_size;
+const pointColor = config.settings.point_color;
+const highlightPointColor = config.settings.highlight_point_color;
+const previewHighlightPointColor = config.settings.preview_hightlight_point_color;
+const colormapColorbyCategorical = config.settings.colormap_colorby_categorical;
+const colormapColorbyContinuous = config.settings.colormap_colorby_continuous;
+
+const trackWidthRatio = 0.07; // DONT CHANGE: factor of 0.07 is needed to make tracks equally wide as the points
+const factorPointSizeVsCellSize = 0.1; // DONT CHANGE: this value relates the actual size of the points to the size of the points in the viewer
+const factorTrackWidthVsHighlight = 3; // choice to make the tracks 7x thinner than the track highlights
 
 // TrackType is a place to store the visual information about a track and any track-specific attributes
 type TrackType = {
@@ -44,6 +57,8 @@ export class PointCanvas {
     readonly controls: OrbitControls;
     readonly bloomPass: UnrealBloomPass;
     readonly selector: PointSelector;
+    private axesHelper: AxesHelper | null = null;
+    showAxes: boolean = true; // Track the visibility of the axes helper
 
     // Maps from track ID to three.js Track objects.
     // This contains all tracks or tracklets across the lineages of all
@@ -70,10 +85,15 @@ export class PointCanvas {
     maxTime: number = 5;
     pointBrightness = 1.0;
     pointSize = initialPointSize;
+    trackWidthFactor = 1; // changed by track-width slider
     // this is used to initialize the points geometry, and kept to initialize the
     // tracks but could be pulled from the points geometry when adding tracks
     maxPointsPerTimepoint = 0;
     private pointIndicesCache: Map<number, number[]> = new Map();
+    colorBy: boolean = false;
+    colorByEvent: Option = DEFAULT_DROPDOWN_OPTION;
+    currentAttributes: number[] | Float32Array = new Float32Array();
+    private previousNumValues: number | undefined = undefined;
 
     constructor(width: number, height: number) {
         this.scene = new Scene();
@@ -126,7 +146,12 @@ export class PointCanvas {
         });
         this.points = new Points(pointsGeometry, shaderMaterial);
 
-        this.scene.add(new AxesHelper(128));
+        // this.scene.add(new AxesHelper(0.2));
+        this.setupAxesHelper();
+        if (deviceState.current.isPhone) {
+            this.toggleAxesHelper();
+        }
+
         this.scene.add(this.points);
         this.scene.fog = new FogExp2(0x000000, 0.0005); // default is 0.00025
 
@@ -150,7 +175,13 @@ export class PointCanvas {
 
         // Set up selection
         this.selector = new PointSelector(this.scene, this.renderer, this.camera, this.controls, this.points);
-        this.setSelectionMode(PointSelectionMode.BOX);
+        if (deviceState.current.isTablet) {
+            this.setSelectionMode(PointSelectionMode.SPHERE);
+        } else if (deviceState.current.isPhone) {
+            this.setSelectionMode(null); // no selection functionality on phone
+        } else {
+            this.setSelectionMode(PointSelectionMode.BOX);
+        }
     }
 
     shallowCopy(): PointCanvas {
@@ -171,23 +202,79 @@ export class PointCanvas {
         state.selectedPointIds = Array.from(this.selectedPointIds);
         state.cameraPosition = this.camera.position.toArray();
         state.cameraTarget = this.controls.target.toArray();
+        state.pointSize = this.pointSize;
+        state.trackWidthFactor = this.trackWidthFactor;
+        state.colorBy = this.colorBy;
+        state.colorByEvent = this.colorByEvent;
+        state.selectionMode = this.selector.selectionMode;
+
+        // Add sphere selector state
+        if (this.selector.sphereSelector) {
+            state.sphereSelector = {
+                position: this.selector.sphereSelector.cursor.position.toArray() as [number, number, number],
+                scale: this.selector.sphereSelector.cursor.scale.toArray() as [number, number, number],
+                rotation: this.selector.sphereSelector.cursor.rotation.toArray() as [number, number, number],
+                visible: this.selector.sphereSelector.cursor.visible,
+            };
+        }
         return state;
     }
 
     updateWithState(state: ViewerState) {
-        this.curTime = state.curTime;
-        this.minTime = state.minTime;
-        this.maxTime = state.maxTime;
-        this.maxPointsPerTimepoint = state.maxPointsPerTimepoint;
-        this.pointBrightness = state.pointBrightness;
-        this.showTracks = state.showTracks;
-        this.showTrackHighlights = state.showTrackHighlights;
-        this.selectedPointIds = new Set(state.selectedPointIds);
-        this.camera.position.fromArray(state.cameraPosition);
-        this.controls.target.fromArray(state.cameraTarget);
+        const defaultState = new ViewerState();
+
+        this.curTime = state.curTime ?? defaultState.curTime;
+        this.minTime = state.minTime ?? defaultState.minTime;
+        this.maxTime = state.maxTime ?? defaultState.maxTime;
+        this.maxPointsPerTimepoint = state.maxPointsPerTimepoint ?? defaultState.maxPointsPerTimepoint;
+        this.pointBrightness = state.pointBrightness ?? defaultState.pointBrightness;
+        this.showTracks = state.showTracks ?? defaultState.showTracks;
+        this.showTrackHighlights = state.showTrackHighlights ?? defaultState.showTrackHighlights;
+        this.removeAllTracks();
+        this.selectedPointIds = new Set(state.selectedPointIds ?? []);
+        this.camera.position.fromArray(state.cameraPosition ?? defaultState.cameraPosition);
+        this.controls.target.fromArray(state.cameraTarget ?? defaultState.cameraTarget);
+        this.pointSize = state.pointSize ?? defaultState.pointSize;
+        this.trackWidthFactor = state.trackWidthFactor ?? defaultState.trackWidthFactor;
+        this.colorBy = state.colorBy ?? defaultState.colorBy;
+        this.colorByEvent = state.colorByEvent ?? defaultState.colorByEvent;
+
+        // Respect device constraints when setting selection mode
+        let newSelectionMode = state.selectionMode ?? defaultState.selectionMode;
+        if (deviceState.current.isPhone) {
+            newSelectionMode = null; // no selection on phone
+        } else if (deviceState.current.isTablet) {
+            newSelectionMode = PointSelectionMode.SPHERE; // force sphere on tablet
+        }
+        this.selector.selectionMode = newSelectionMode;
+
+        // Update sphere selector
+        if (this.selector.sphereSelector && state.sphereSelector) {
+            this.selector.sphereSelector.cursor.position.fromArray(
+                state.sphereSelector.position ?? defaultState.sphereSelector.position,
+            );
+            this.selector.sphereSelector.cursor.scale.fromArray(
+                state.sphereSelector.scale ?? defaultState.sphereSelector.scale,
+            );
+            this.selector.sphereSelector.cursor.rotation.fromArray(
+                state.sphereSelector.rotation ?? defaultState.sphereSelector.rotation,
+            );
+            this.selector.sphereSelector.cursor.visible =
+                state.sphereSelector.visible ?? defaultState.sphereSelector.visible;
+            if (deviceState.current.isTablet) {
+                this.selector.sphereSelector.cursor.visible = true;
+                if (
+                    (state.selectionMode === PointSelectionMode.SPHERE ||
+                        state.selectionMode === PointSelectionMode.SPHERICAL_CURSOR) &&
+                    !state.sphereSelector.visible
+                ) {
+                    this.selector.sphereSelector.cursor.visible = false;
+                }
+            }
+        }
     }
 
-    setSelectionMode(mode: PointSelectionMode) {
+    setSelectionMode(mode: PointSelectionMode | null) {
         this.selector.setSelectionMode(mode);
     }
 
@@ -199,6 +286,36 @@ export class PointCanvas {
         this.composer.render();
         this.controls.update();
     };
+
+    // camera only resetted upon trackManager change (new data)
+    checkCameraLock(ndim: number) {
+        this.controls.autoRotate = false;
+
+        if (ndim == 2) {
+            this.controls.enableRotate = false;
+            console.debug("Rotation locked because 2D dataset detected");
+        } else if (ndim == 3) {
+            this.controls.enableRotate = true;
+            console.debug("Rotation enabled because 3D dataset detected");
+        } else {
+            console.error("Invalid ndim value: " + ndim);
+        }
+    }
+
+    // ran upon new data load
+    resetCamera() {
+        const cameraPosition = new ViewerState().cameraPosition;
+        const cameraTarget = new ViewerState().cameraTarget;
+        this.camera.position.set(cameraPosition[0], cameraPosition[1], cameraPosition[2]);
+        this.controls.target.set(cameraTarget[0], cameraTarget[1], cameraTarget[2]);
+        this.curTime = 0;
+        console.debug("Camera reset");
+    }
+
+    resetPointSize() {
+        this.pointSize = initialPointSize;
+        console.debug("point size reset to: ", this.pointSize);
+    }
 
     updateSelectedPointIndices() {
         const cacheKey = this.createCacheKey();
@@ -244,25 +361,168 @@ export class PointCanvas {
     highlightPoints(points: number[]) {
         const colorAttribute = this.points.geometry.getAttribute("color");
         const color = new Color();
-        color.setRGB(0.9, 0.0, 0.9, SRGBColorSpace);
+        color.setRGB(highlightPointColor[0], highlightPointColor[1], highlightPointColor[2], SRGBColorSpace); // pink
         for (const i of points) {
             colorAttribute.setXYZ(i, color.r, color.g, color.b);
         }
         colorAttribute.needsUpdate = true;
     }
 
-    resetPointColors() {
-        if (!this.points.geometry.hasAttribute("color")) {
-            return;
+    updatePreviewPoints() {
+        if (
+            this.selector.selectionMode === PointSelectionMode.SPHERICAL_CURSOR ||
+            this.selector.selectionMode === PointSelectionMode.SPHERE
+        ) {
+            this.selector.sphereSelector.findPointsWithinSelector();
         }
-        const color = new Color();
-        color.setRGB(0.0, 0.8, 0.8, SRGBColorSpace);
-        color.multiplyScalar(this.pointBrightness);
+    }
+
+    highlightPreviewPoints(points: number[]) {
         const colorAttribute = this.points.geometry.getAttribute("color");
-        for (let i = 0; i < colorAttribute.count; i++) {
+        const color = new Color();
+        color.setRGB(
+            previewHighlightPointColor[0],
+            previewHighlightPointColor[1],
+            previewHighlightPointColor[2],
+            SRGBColorSpace,
+        ); // yellow
+        for (const i of points) {
             colorAttribute.setXYZ(i, color.r, color.g, color.b);
         }
         colorAttribute.needsUpdate = true;
+    }
+
+    resetPointColors(attributesInput?: Float32Array) {
+        if (!this.points.geometry.hasAttribute("color")) {
+            return;
+        }
+
+        const colorAttribute = this.points.geometry.getAttribute("color");
+        const geometry = this.points.geometry;
+        const numPoints = geometry.drawRange.count;
+        const positions = geometry.getAttribute("position");
+
+        let attributes;
+        if (this.colorByEvent.action === "default") {
+            attributes = new Float32Array(numPoints).fill(1); // all 1
+            console.debug("Default attributes (1)");
+        } else {
+            if (this.colorByEvent.action === "calculate") {
+                attributes = this.calculateAttributeVector(positions, this.colorByEvent, numPoints); // calculated attributes based on position
+                console.debug("Attributes calculated");
+            } else if (this.colorByEvent.action === "provided" || this.colorByEvent.action === "provided-normalized") {
+                if (attributesInput) {
+                    attributes = attributesInput; // take provided attributes fetched from Zarr
+                    this.currentAttributes = attributes;
+                    console.debug("Attributes provided, using attributesInput");
+                } else {
+                    attributes = this.currentAttributes;
+                    console.debug("No attributes provided, using currentAttributes");
+                }
+            } else {
+                console.error("Invalid action type for colorByEvent:", this.colorByEvent.action);
+            }
+            if (attributes) {
+                if (
+                    this.colorByEvent.action != "provided-normalized" &&
+                    attributes.length > 0 &&
+                    this.colorByEvent.type != "hex"
+                ) {
+                    attributes = this.normalizeAttributeVector(attributes);
+                }
+            } else {
+                attributes = new Float32Array(numPoints).fill(1);
+                console.error("No attributes found for colorByEvent:", this.colorByEvent);
+            }
+        }
+
+        if (this.colorByEvent.type === "default") {
+            const color = new Color();
+            color.setRGB(pointColor[0], pointColor[1], pointColor[2], SRGBColorSpace); // cyan/turquoise
+            color.multiplyScalar(this.pointBrightness);
+            for (let i = 0; i < numPoints; i++) {
+                colorAttribute.setXYZ(i, color.r, color.g, color.b);
+            }
+        } else if (this.colorByEvent.type === "hex") {
+            for (let i = 0; i < numPoints; i++) {
+                const hexInt = attributes[i]; // must be [0 1]
+                if (hexInt === undefined) {
+                    console.warn("Invalid hexInt value:", hexInt);
+                    continue; // skip this iteration
+                }
+                const hexStr = `#${hexInt.toString(16).padStart(6, "0").toUpperCase()}`;
+                const color = new Color(hexStr);
+                color.multiplyScalar(this.pointBrightness);
+                colorAttribute.setXYZ(i, color.r, color.g, color.b);
+            }
+        } else {
+            const color = new Color();
+            if (this.colorByEvent.type === "categorical") {
+                colormaps.setColorMap(colormapColorbyCategorical, 50);
+            } else if (this.colorByEvent.type === "continuous") {
+                colormaps.setColorMap(colormapColorbyContinuous, 50);
+            }
+            for (let i = 0; i < numPoints; i++) {
+                const scalar = attributes[i]; // must be [0 1]
+                const colorOfScalar = colormaps.getColor(scalar); // remove the bright/dark edges of colormap
+                // const colorOfScalar = colormaps.getColor(scalar*0.8+0.1); //remove the bright/dark edges of colormap
+                color.setRGB(colorOfScalar.r, colorOfScalar.g, colorOfScalar.b, SRGBColorSpace);
+                color.multiplyScalar(this.pointBrightness);
+                colorAttribute.setXYZ(i, color.r, color.g, color.b);
+            }
+        }
+        colorAttribute.needsUpdate = true;
+    }
+
+    calculateAttributeVector(
+        positions: BufferAttribute | InterleavedBufferAttribute,
+        colorByEvent: Option,
+        numPoints: number,
+    ): number[] {
+        const attributeVector = [];
+
+        for (let i = 0; i < numPoints; i++) {
+            if (colorByEvent.name === "uniform") {
+                attributeVector.push(1); // constant color
+            } else if (colorByEvent.name === "x-position") {
+                attributeVector.push(positions.getX(i) + 1000); // color based on X coordinate
+            } else if (colorByEvent.name === "y-position") {
+                attributeVector.push(positions.getY(i)); // color based on Y coordinate
+            } else if (colorByEvent.name === "z-position") {
+                attributeVector.push(positions.getZ(i)); // color based on Z coordinate
+            } else if (colorByEvent.name === "sign(x-pos)") {
+                const bool = positions.getX(i) < 0;
+                attributeVector.push(bool ? 0 : 1); // color based on X coordinate (2 groups)
+            } else if (colorByEvent.name === "quadrants") {
+                const x = positions.getX(i) > 0 ? 1 : 0;
+                const y = positions.getY(i) > 0 ? 1 : 0;
+                const z = positions.getZ(i) > 0 ? 1 : 0;
+                const quadrant = x + y * 2 + z * 4; //
+                attributeVector.push(quadrant); // color based on XY coordinates (4 groups)
+            } else {
+                attributeVector.push(1); // default to constant color if event type not recognized
+                console.error("Invalid colorByEvent name to be calculated from data:", colorByEvent.name);
+            }
+        }
+
+        return attributeVector;
+    }
+
+    normalizeAttributeVector(attributes: number[] | Float32Array): number[] | Float32Array {
+        const min = Math.min(...attributes);
+        const max = Math.max(...attributes);
+        const range = max - min;
+
+        // Avoid division by zero in case all values are the same
+        if (range === 0) {
+            return attributes.map(() => 1); // Arbitrary choice: map all to the midpoint (0.5)
+        }
+
+        return attributes.map((value) => (value - min) / range);
+    }
+
+    removeLastSelection() {
+        this.selectedPointIds = new Set(this.fetchedPointIds);
     }
 
     setSize(width: number, height: number) {
@@ -294,7 +554,7 @@ export class PointCanvas {
         this.resetPointColors();
     }
 
-    setPointsSizes() {
+    updatePointsSizes() {
         const geometry = this.points.geometry;
         const sizes = geometry.getAttribute("size");
 
@@ -304,9 +564,19 @@ export class PointCanvas {
         sizes.needsUpdate = true;
 
         for (const track of this.tracks.values()) {
-            track.threeTrack.material.trackwidth = this.pointSize / 100;
-            track.threeTrack.material.highlightwidth = this.pointSize / 15;
+            track.threeTrack.material.trackwidth =
+                (this.pointSize * trackWidthRatio * this.trackWidthFactor) / factorTrackWidthVsHighlight;
+            track.threeTrack.material.highlightwidth = this.pointSize * trackWidthRatio * this.trackWidthFactor;
         }
+    }
+
+    calculateMeanCellSize(data: Float32Array, numPoints: number, num: number): number {
+        let cellSizeTotal = 0;
+        for (let i = 0; i < numPoints; i++) {
+            cellSizeTotal = cellSizeTotal + factorPointSizeVsCellSize * data[num * i + 3];
+        }
+        const cellSize = cellSizeTotal / numPoints;
+        return cellSize;
     }
 
     setPointsPositions(data: Float32Array) {
@@ -314,11 +584,33 @@ export class PointCanvas {
         const geometry = this.points.geometry;
         const positions = geometry.getAttribute("position");
         const sizes = geometry.getAttribute("size");
+
         const num = numberOfValuesPerPoint;
+
+        // Track if this is the first data load
+        if (this.previousNumValues === undefined) {
+            this.previousNumValues = num;
+            console.debug("first data load - num = ", num, this.pointSize);
+            // Don't modify pointSize - keep what was loaded from URL
+        }
+        // Reset to initialPointSize only when switching from num=4 to num=3
+        else if (num === 3 && this.previousNumValues === 4) {
+            this.pointSize = initialPointSize;
+            console.debug("Reset to initial point size - switched from num=4 to num=3");
+            this.previousNumValues = num;
+        }
+
+        // Calculate mean cell size for num=4, to get the track widths right
+        if (num === 4) {
+            this.pointSize = this.calculateMeanCellSize(data, numPoints, num);
+            console.debug("mean cell size calculated: ", this.pointSize);
+            this.previousNumValues = num;
+        }
+
         for (let i = 0; i < numPoints; i++) {
-            positions.setXYZ(i, data[num * i], data[num * i + 1], data[num * i + 2]);
+            positions.setXYZ(i, data[num * i + 0], data[num * i + 1], data[num * i + 2]);
             if (num == 4) {
-                sizes.setX(i, 25 * data[num * i + 3]); // factor of 21 used to match the desired size of the points
+                sizes.setX(i, factorPointSizeVsCellSize * data[num * i + 3]);
             } else {
                 sizes.setX(i, this.pointSize);
             }
@@ -341,8 +633,8 @@ export class PointCanvas {
             this.showTrackHighlights,
             this.minTime,
             this.maxTime,
-            this.pointSize / 100,
-            this.pointSize / 15,
+            (this.pointSize * trackWidthRatio * this.trackWidthFactor) / factorTrackWidthVsHighlight, // trackWidth
+            this.pointSize * trackWidthRatio * this.trackWidthFactor, // highlightWidth
         );
         this.tracks.set(trackID, { threeTrack, parentTrackID });
         this.scene.add(threeTrack);
@@ -356,8 +648,8 @@ export class PointCanvas {
                 this.showTrackHighlights,
                 this.minTime,
                 this.maxTime,
-                this.pointSize / 100,
-                this.pointSize / 15,
+                (this.pointSize * trackWidthRatio * this.trackWidthFactor) / factorTrackWidthVsHighlight, // trackWidth
+                this.pointSize * trackWidthRatio * this.trackWidthFactor, // highlightWidth
             );
         });
     }
@@ -374,8 +666,8 @@ export class PointCanvas {
     }
 
     removeAllTracks() {
-        console.log("removeAllTracks!");
         this.selectedPointIds = new Set();
+        this.selectedPointIndices = [];
         this.fetchedRootTrackIds.clear();
         this.fetchedPointIds.clear();
         for (const trackID of this.tracks.keys()) {
@@ -395,6 +687,33 @@ export class PointCanvas {
             }
         } else {
             this.points.material.dispose();
+        }
+    }
+
+    MobileSelectCells() {
+        // if used on tablet, this will select the cells upon button click
+        this.selector.sphereSelector.MobileFindAndSelect();
+    }
+
+    setSelectorScale(scale: number) {
+        // on tablet: this will set the size of the sphere selector upon the user using the slider
+        this.selector.sphereSelector.cursor.scale.set(scale, scale, scale);
+    }
+
+    private setupAxesHelper() {
+        this.axesHelper = new AxesHelper(0.2);
+        this.scene.add(this.axesHelper);
+    }
+
+    // Method to toggle the axes helper visibility
+    toggleAxesHelper() {
+        if (this.axesHelper) {
+            this.showAxes = !this.showAxes; // Toggle the visibility flag
+            if (this.showAxes) {
+                this.scene.add(this.axesHelper); // Add to the scene if visible
+            } else {
+                this.scene.remove(this.axesHelper); // Remove from the scene if not visiblev
+            }
         }
     }
 }

@@ -1,6 +1,9 @@
 import config from "../../CONFIG.ts";
+import { Option, DEFAULT_DROPDOWN_OPTION } from "@/lib/TrackManager";
+import { PointSelectionMode } from "./PointSelector.ts";
 
 const DEFAULT_ZARR_URL = config.data.default_dataset;
+const initialPointSize = config.settings.point_size;
 
 const HASH_KEY = "viewerState";
 
@@ -23,9 +26,25 @@ export class ViewerState {
     selectedPointIds: Array<number> = [];
     showTracks = true;
     showTrackHighlights = true;
-    // Default position and target from interacting with ZSNS001.
-    cameraPosition = [500, 500, -1250];
-    cameraTarget = [500, 500, 250];
+    // Default position and target for the camera
+    cameraPosition = [-4, 0, 0]; // was  [-1250, 500, 500];
+    cameraTarget = [0, 0, 0]; // was  [500, 500, 500];
+    pointSize: number = initialPointSize;
+    trackWidthFactor: number = 1;
+    colorBy: boolean = false;
+    colorByEvent: Option = DEFAULT_DROPDOWN_OPTION;
+    selectionMode: PointSelectionMode | null = PointSelectionMode.BOX;
+    sphereSelector: {
+        position: [number, number, number];
+        scale: [number, number, number];
+        rotation: [number, number, number];
+        visible: boolean;
+    } = {
+        position: [0, 0, 0],
+        scale: [1, 1, 1],
+        rotation: [0, 0, 0],
+        visible: false,
+    };
 
     toUrlHash(): string {
         // Use URLSearchParams to sanitize serialized string values for URL.

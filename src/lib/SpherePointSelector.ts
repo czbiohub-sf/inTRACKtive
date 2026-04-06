@@ -13,13 +13,13 @@ import {
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/Addons.js";
-
-import { SelectionChanged } from "@/lib/PointSelector";
+import { SelectionChanged, SelectionPreviewChanged } from "@/lib/PointSelector";
+import { ViewerState } from "./ViewerState.ts";
 
 // Selecting with a sphere, with optional transform controls.
 export class SpherePointSelector {
     readonly cursor = new Mesh(
-        new SphereGeometry(25, 8, 8),
+        new SphereGeometry(0.07, 16, 8),
         new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.05 }),
     );
     readonly raycaster = new Raycaster();
@@ -30,6 +30,7 @@ export class SpherePointSelector {
     readonly points: Points;
     readonly cursorControl: TransformControls;
     readonly selectionChanged: SelectionChanged;
+    readonly selectionPreviewChanged: SelectionPreviewChanged;
     readonly pointer = new Vector2(0, 0);
 
     // True if this should not respond to pointer movements, false otherwise.
@@ -42,6 +43,7 @@ export class SpherePointSelector {
         controls: OrbitControls,
         points: Points,
         selectionChanged: SelectionChanged,
+        selectionPreviewChanged: SelectionPreviewChanged,
     ) {
         this.scene = scene;
         this.renderer = renderer;
@@ -49,10 +51,9 @@ export class SpherePointSelector {
         this.controls = controls;
         this.points = points;
         this.selectionChanged = selectionChanged;
+        this.selectionPreviewChanged = selectionPreviewChanged;
 
-        // Value of 10 arbitrarily chosen for a decent experience,
-        // compared to 1 which can be sluggish.
-        this.raycaster.params.Points.threshold = 10;
+        this.raycaster.params.Points.threshold = 0.05;
 
         this.cursorControl = new TransformControls(camera, renderer.domElement);
         this.cursorControl.size = 0.5;
@@ -62,7 +63,11 @@ export class SpherePointSelector {
         this.scene.add(this.cursorControl);
 
         this.draggingChanged = this.draggingChanged.bind(this);
+        this.cursorControl.addEventListener("change", this.findPointsWithinSelector.bind(this));
         this.cursorControl.addEventListener("dragging-changed", this.draggingChanged);
+
+        const cameraTarget = new ViewerState().cameraTarget;
+        this.cursor.position.set(cameraTarget[0], cameraTarget[1], cameraTarget[2]);
     }
 
     dispose() {
@@ -93,7 +98,8 @@ export class SpherePointSelector {
             case "Control":
                 this.controls.enabled = false;
                 break;
-            case "Shift":
+            case " ": // Space key
+                event.preventDefault(); // Prevent page scrolling
                 if (this.cursor.visible && !this.cursorControl.object) {
                     this.cursorLock = false;
                 }
@@ -107,7 +113,7 @@ export class SpherePointSelector {
             case "Control":
                 this.controls.enabled = true;
                 break;
-            case "Shift":
+            case " ": // Space key
                 this.cursorLock = true;
                 break;
             case "s":
@@ -131,6 +137,7 @@ export class SpherePointSelector {
         if (event.ctrlKey) {
             event.preventDefault();
             this.cursor.scale.multiplyScalar(1 + event.deltaY * 0.001);
+            this.findPointsWithinSelector();
         }
     }
 
@@ -145,6 +152,7 @@ export class SpherePointSelector {
         const intersects = this.raycaster.intersectObject(this.points);
         if (intersects.length > 0) {
             this.cursor.position.set(intersects[0].point.x, intersects[0].point.y, intersects[0].point.z);
+            this.findPointsWithinSelector();
         }
     }
 
@@ -153,17 +161,37 @@ export class SpherePointSelector {
         if (!event.shiftKey || !this.cursor.visible) {
             return;
         }
-        // return list of points inside cursor sphere
+        const selected = this.findPointsWithinSelector();
+        this.selectionChanged(selected);
+    }
+
+    pointerDown(_event: MouseEvent) {}
+
+    pointerCancel(_event: MouseEvent) {}
+
+    findPointsWithinSelector(): number[] {
+        // find the points within the cursor sphere
         const radius = this.cursor.geometry.parameters.radius;
         const normalMatrix = new Matrix3();
         normalMatrix.setFromMatrix4(this.cursor.matrixWorld);
         normalMatrix.invert();
         const center = this.cursor.position;
         const geometry = this.points.geometry;
+
+        // Check if geometry has a valid 'position' attribute
+        if (!geometry || !geometry.getAttribute("position") || geometry.getAttribute("position").count === 0) {
+            return [];
+        }
+
         const positions = geometry.getAttribute("position");
-        const numPoints = positions.count;
+        // Get the draw range which indicates which points are actually active
+        const drawRange = geometry.drawRange;
+        const startPoint = drawRange.start;
+        const endPoint = Math.min(drawRange.start + drawRange.count, positions.count);
+
         const selected = [];
-        for (let i = 0; i < numPoints; i++) {
+        // Only check points within the draw range
+        for (let i = startPoint; i < endPoint; i++) {
             const x = positions.getX(i);
             const y = positions.getY(i);
             const z = positions.getZ(i);
@@ -173,11 +201,42 @@ export class SpherePointSelector {
                 selected.push(i);
             }
         }
-        console.log("selected points:", selected);
-        this.selectionChanged(selected);
+        this.selectionPreviewChanged(selected);
+        return selected;
     }
 
-    pointerDown(_event: MouseEvent) {}
+    MobileFindAndSelect() {
+        // if used on Mobile Device, this will select the cells upon button click
+        const radius = this.cursor.geometry.parameters.radius;
+        const normalMatrix = new Matrix3();
+        normalMatrix.setFromMatrix4(this.cursor.matrixWorld);
+        normalMatrix.invert();
+        const center = this.cursor.position;
+        const geometry = this.points.geometry;
 
-    pointerCancel(_event: MouseEvent) {}
+        // Check if geometry has a valid 'position' attribute
+        if (!geometry || !geometry.getAttribute("position") || geometry.getAttribute("position").count === 0) {
+            return;
+        }
+
+        const positions = geometry.getAttribute("position");
+        // Get the draw range which indicates which points are actually active
+        const drawRange = geometry.drawRange;
+        const startPoint = drawRange.start;
+        const endPoint = Math.min(drawRange.start + drawRange.count, positions.count);
+
+        const selected = [];
+        // Only check points within the draw range
+        for (let i = startPoint; i < endPoint; i++) {
+            const x = positions.getX(i);
+            const y = positions.getY(i);
+            const z = positions.getZ(i);
+            const vecToCenter = new Vector3(x, y, z).sub(center);
+            const scaledVecToCenter = vecToCenter.applyMatrix3(normalMatrix);
+            if (scaledVecToCenter.length() < radius) {
+                selected.push(i);
+            }
+        }
+        this.selectionChanged(selected);
+    }
 }
