@@ -54,6 +54,8 @@ See the image below with the explanation of the `inTRACKtive` UI:
   </p>
 </p>
 
+> 🎬 **Save Video** — Click the download icon in the playback bar to export an MP4 of the current view. The viewer captures each timepoint frame-by-frame (waiting for data to fully load) and encodes the result using the browser-native WebCodecs API — no plugins required. Supported in Chrome/Edge/Safari; quality and frame rate can be configured in the dialog. On mobile or Firefox the button is hidden.
+
 ([↑Back to table of contents↑](#table-of-contents))
 
 </details><br/>
@@ -156,6 +158,23 @@ intracktive open path/to/tracks.geff
 ```
 
 where the path is the full path to the file, including the filename (example: `~/Downloads/tracks_bundle.zarr`). This command will spin up a local host at the location of the Zarr bundle, and open a browser tab with `inTRACKtive` running with this dataset. If you `intracktive open` a CSV/Parquet/GEFF file, the command will first convert the input to our Zarr format and open that file. 
+
+To record an MP4 video of the visualization from the command line (without opening a browser), use `intracktive record`. This requires `playwright` and `ffmpeg`:
+
+```
+pip install 'intracktive[record]'          # install playwright
+playwright install chromium                # download headless browser
+brew install ffmpeg                        # or: sudo apt install ffmpeg
+```
+
+Then record:
+
+```
+intracktive record path/to/tracks_bundle.zarr
+intracktive record path/to/tracks.csv --fps 30 --skip 2 --output video.mp4
+```
+
+The command drives a headless browser through each timepoint, waits for data to fully load at each frame, and encodes the result with ffmpeg. Options: `--fps` (frame rate), `--skip N` (every N-th timepoint), `--output` (file path), `--quality` (low / medium / high / ultra), `--width` / `--height` (viewport in pixels).
 
 ---
 
