@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "@/css/app.css";
 
 import { Box, Divider, Drawer } from "@mui/material";
@@ -18,6 +18,7 @@ import LeftSidebarWrapper from "./leftSidebar/LeftSidebarWrapper";
 // import { TimestampOverlay } from "./overlays/TimestampOverlay";
 import { ColorMapTracks, ColorMapCells } from "./overlays/ColorMap.tsx";
 import { TrackDownloadData } from "./DownloadButton";
+import SaveVideoButton, { RecordingConfig, RecordingState } from "./SaveVideoButton";
 
 import config from "../../CONFIG.ts";
 import deviceState from "@/lib/DeviceState.ts";
@@ -67,6 +68,12 @@ export default function App() {
     const [playing, setPlaying] = useState(false);
     const [isLoadingPoints, setIsLoadingPoints] = useState(true);
     const [numLoadingTracks, setNumLoadingTracks] = useState(0);
+
+    // recording state
+    const [recordingState, setRecordingState] = useState<RecordingState | null>(null);
+    // ref so effect-curTime can check recording status without adding recordingState to its deps
+    const isRecordingActiveRef = useRef(false);
+    isRecordingActiveRef.current = !!recordingState?.active;
 
     // refresh window to initial state
     const refreshPage = () => {
@@ -181,8 +188,16 @@ export default function App() {
     // update the points when the array or timepoint changes
     useEffect(() => {
         console.debug("effect-curTime");
-        // show a loading indicator if the fetch takes longer than 1/2 a frame (avoid flicker)
-        const loadingTimeout = setTimeout(() => setIsLoadingPoints(true), playbackIntervalMs / 2);
+        // During recording we must mark loading immediately so the capture loop never reads
+        // isLoadingPoints===false while a fetch is still in-flight (the debounce would leave a
+        // ~31 ms window where the stale frame could be captured). During normal playback we keep
+        // the debounce to avoid a loading-indicator flicker on fast fetches.
+        let loadingTimeout: ReturnType<typeof setTimeout> | undefined;
+        if (isRecordingActiveRef.current) {
+            setIsLoadingPoints(true);
+        } else {
+            loadingTimeout = setTimeout(() => setIsLoadingPoints(true), playbackIntervalMs / 2);
+        }
         let ignore = false;
         // TODO: this is a very basic attempt to prevent stale data
         // in addition, we should debounce the input and verify the data is current
@@ -251,7 +266,7 @@ export default function App() {
             updateTracks();
         }
 
-        // TODO: add missing dependencies
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- updateTracks and fetchedPointIds intentionally omitted; updateTracks is not memoized and would cause infinite re-renders
     }, [trackManager, dispatchCanvas, canvas.selectedPointIds]);
 
     // playback time points
@@ -272,6 +287,111 @@ export default function App() {
             };
         }
     }, [dispatchCanvas, numTimes, playing]);
+
+    // Expose loading state and controls globally for the CLI Playwright recorder
+    useEffect(() => {
+        // eslint-disable-next-line camelcase
+        (window as unknown as Record<string, unknown>).__intracktive_loading = isLoadingPoints || numLoadingTracks > 0;
+        // eslint-disable-next-line camelcase
+        (window as unknown as Record<string, unknown>).__intracktive_numTimes = numTimes;
+    }, [isLoadingPoints, numLoadingTracks, numTimes]);
+
+    useEffect(() => {
+        // eslint-disable-next-line camelcase
+        (window as unknown as Record<string, unknown>).__intracktive_setTime = (t: number) => {
+            dispatchCanvas({ type: ActionType.CUR_TIME, curTime: t });
+        };
+    }, [dispatchCanvas]);
+
+    // Frame-by-frame recording capture loop
+    useEffect(() => {
+        if (!recordingState?.active) return;
+
+        // After dispatching a new curTime there is a short debounce window (~playbackIntervalMs/2)
+        // before isLoadingPoints becomes true. We skip one effect cycle using justAdvanced so we
+        // don't accidentally capture the previous frame's pixels.
+        if (recordingState.justAdvanced) {
+            setRecordingState((prev) => prev && { ...prev, justAdvanced: false });
+            return;
+        }
+
+        if (isLoadingPoints || numLoadingTracks > 0) return;
+        if (canvas.curTime !== recordingState.targetTime) return;
+
+        // Wait for Three.js to render the new frame before reading the canvas pixels
+        requestAnimationFrame(() => {
+            const dataURL = canvas.renderer.domElement.toDataURL("image/png");
+            const newFrames = [...recordingState.capturedFrames, dataURL];
+            const nextTime = recordingState.targetTime + recordingState.config.frameSkip;
+
+            if (nextTime >= numTimes) {
+                if (recordingState.originalSize) {
+                    dispatchCanvas({
+                        type: ActionType.SIZE,
+                        width: recordingState.originalSize.width,
+                        height: recordingState.originalSize.height,
+                    });
+                    dispatchCanvas({ type: ActionType.POINT_SIZES, pointSize: recordingState.originalSize.pointSize });
+                }
+                setRecordingState({ ...recordingState, active: false, capturedFrames: newFrames });
+            } else {
+                dispatchCanvas({ type: ActionType.CUR_TIME, curTime: nextTime });
+                setRecordingState({
+                    ...recordingState,
+                    targetTime: nextTime,
+                    capturedFrames: newFrames,
+                    justAdvanced: true,
+                });
+            }
+        });
+    }, [
+        recordingState,
+        isLoadingPoints,
+        numLoadingTracks,
+        canvas.curTime,
+        canvas.renderer.domElement,
+        numTimes,
+        dispatchCanvas,
+    ]);
+
+    const startRecording = (config: RecordingConfig) => {
+        setPlaying(false);
+        dispatchCanvas({ type: ActionType.CUR_TIME, curTime: 0 });
+
+        const el = canvas.renderer.domElement;
+        const origW = el.clientWidth;
+        const origH = el.clientHeight;
+        const origPointSize = canvas.pointSize;
+        const scale = Math.max(2, window.devicePixelRatio || 1);
+
+        // updateStyle: false enlarges the pixel buffer without changing CSS layout
+        dispatchCanvas({ type: ActionType.SIZE, width: origW * scale, height: origH * scale, updateStyle: false });
+        // Scale point size so dots appear the same size in the output video
+        dispatchCanvas({ type: ActionType.POINT_SIZES, pointSize: origPointSize * scale });
+
+        setRecordingState({
+            active: true,
+            config,
+            targetTime: 0,
+            capturedFrames: [],
+            justAdvanced: true,
+            originalSize: { width: origW, height: origH, pointSize: origPointSize },
+        });
+    };
+
+    const cancelRecording = useCallback(() => {
+        setRecordingState((prev) => {
+            if (prev?.originalSize) {
+                dispatchCanvas({
+                    type: ActionType.SIZE,
+                    width: prev.originalSize.width,
+                    height: prev.originalSize.height,
+                });
+                dispatchCanvas({ type: ActionType.POINT_SIZES, pointSize: prev.originalSize.pointSize });
+            }
+            return null;
+        });
+    }, [dispatchCanvas]);
 
     const getTrackDownloadData = () => {
         const trackData: TrackDownloadData[] = [];
@@ -495,27 +615,42 @@ export default function App() {
                 {/* The playback controls */}
                 <Box
                     sx={{
+                        display: "flex",
+                        flexDirection: "row",
+                        alignItems: "center",
                         flexGrow: 1,
                         padding: ".5em",
                         height: detectedDevice.isMobile ? "150px" : "50px", // leaving extra space for mobile
                         paddingLeft: 0,
                     }}
                 >
-                    <PlaybackControls
-                        enabledPlaySlider={true}
-                        enabledRotation={trackManager?.ndim === 3}
-                        autoRotate={canvas.controls.autoRotate}
-                        playing={playing}
-                        curTime={canvas.curTime}
-                        numTimes={numTimes}
-                        setAutoRotate={(autoRotate: boolean) => {
-                            dispatchCanvas({ type: ActionType.AUTO_ROTATE, autoRotate });
-                        }}
-                        setPlaying={setPlaying}
-                        setCurTime={(curTime: number) => {
-                            dispatchCanvas({ type: ActionType.CUR_TIME, curTime });
-                        }}
-                    />
+                    <Box sx={{ flexGrow: 1 }}>
+                        <PlaybackControls
+                            enabledPlaySlider={true}
+                            enabledRotation={trackManager?.ndim === 3}
+                            autoRotate={canvas.controls.autoRotate}
+                            playing={playing}
+                            curTime={canvas.curTime}
+                            numTimes={numTimes}
+                            setAutoRotate={(autoRotate: boolean) => {
+                                dispatchCanvas({ type: ActionType.AUTO_ROTATE, autoRotate });
+                            }}
+                            setPlaying={setPlaying}
+                            setCurTime={(curTime: number) => {
+                                dispatchCanvas({ type: ActionType.CUR_TIME, curTime });
+                            }}
+                        />
+                    </Box>
+                    {!detectedDevice.isPhone && (
+                        <SaveVideoButton
+                            numTimes={numTimes}
+                            playbackFPS={playbackFPS}
+                            recordingState={recordingState}
+                            onStartRecording={startRecording}
+                            onCancelRecording={cancelRecording}
+                            dataUrl={dataUrl}
+                        />
+                    )}
                 </Box>
             </Box>
             <WarningDialog

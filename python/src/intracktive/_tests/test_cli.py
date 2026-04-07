@@ -11,6 +11,7 @@ from geff.testing.data import create_mock_geff
 from intracktive.convert import zarr_to_browser
 from intracktive.main import main
 from intracktive.open import open_file
+from intracktive.record import record_file
 
 
 def _run_command(command_and_args: List[str]) -> None:
@@ -604,3 +605,201 @@ def test_zarr_to_browser_no_browser_flag(tmp_path: Path) -> None:
         # Data server + frontend server (when bundled frontend is available) = 2 calls,
         # or just 1 call when falling back to the external URL.
         assert mock_serve_directory.call_count in (1, 2)
+
+
+# ---------------------------------------------------------------------------
+# record_file tests
+# ---------------------------------------------------------------------------
+
+
+def _make_valid_zarr(base: Path) -> Path:
+    """Create a minimal valid inTRACKtive Zarr store on disk."""
+    zarr_path = base / "test.zarr"
+    zarr_path.mkdir()
+    for folder in [
+        "points",
+        "points_to_tracks",
+        "tracks_to_points",
+        "tracks_to_tracks",
+    ]:
+        (zarr_path / folder).mkdir()
+    return zarr_path
+
+
+def _make_playwright_mock(num_times: int = 3):
+    """
+    Return a (mock_sync_playwright, mock_page) pair that mimics the Playwright
+    sync API used by record_file.
+
+    The mock page:
+    - returns ``num_times`` from evaluate("window.__intracktive_numTimes")
+    - writes a tiny valid 2x2 PNG for every screenshot() call so that the
+      captured frame files are real images (required if ffmpeg runs for real)
+    """
+    import struct
+    import zlib
+    from unittest.mock import MagicMock
+
+    def _tiny_png(path: str) -> None:
+        """Write a minimal 2x2 white PNG to *path*."""
+
+        def _chunk(tag: bytes, data: bytes) -> bytes:
+            crc = zlib.crc32(tag + data) & 0xFFFFFFFF
+            return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
+
+        raw_rows = b"\x00\xff\xff\xff" * 2  # two RGB rows, filter byte = 0
+        idat = zlib.compress(raw_rows * 2)
+        png = (
+            b"\x89PNG\r\n\x1a\n"
+            + _chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0))
+            + _chunk(b"IDAT", idat)
+            + _chunk(b"IEND", b"")
+        )
+        Path(path).write_bytes(png)
+
+    mock_page = MagicMock()
+    mock_page.evaluate.side_effect = (
+        lambda expr: num_times if "numTimes" in expr else None
+    )
+    mock_page.locator.return_value.first.screenshot.side_effect = (
+        lambda path: _tiny_png(path)
+    )
+
+    mock_browser = MagicMock()
+    mock_browser.new_page.return_value = mock_page
+
+    mock_playwright_instance = MagicMock()
+    mock_playwright_instance.chromium.launch.return_value = mock_browser
+
+    mock_sync_playwright = MagicMock()
+    mock_sync_playwright.return_value.__enter__ = MagicMock(
+        return_value=mock_playwright_instance
+    )
+    mock_sync_playwright.return_value.__exit__ = MagicMock(return_value=False)
+
+    return mock_sync_playwright, mock_page
+
+
+def test_record_file_missing_ffmpeg(tmp_path: Path) -> None:
+    """record_file raises UsageError when ffmpeg is not on PATH."""
+    from unittest.mock import MagicMock
+
+    zarr_path = _make_valid_zarr(tmp_path)
+
+    with (
+        # Ensure playwright check passes regardless of whether it is installed
+        patch("intracktive.record.sync_playwright", MagicMock()),
+        patch("intracktive.record.shutil.which", return_value=None),
+        pytest.raises(Exception, match="ffmpeg"),
+    ):
+        record_file(input_path=zarr_path, output=tmp_path / "out.mp4")
+
+
+def test_record_file_no_frontend(tmp_path: Path) -> None:
+    """record_file raises UsageError when no bundled frontend is present."""
+    from unittest.mock import MagicMock
+
+    zarr_path = _make_valid_zarr(tmp_path)
+
+    # Patch __file__ on the record module so that the frontend path resolves
+    # to a directory that exists but has no index.html in it.
+    empty_frontend = tmp_path / "frontend"
+    empty_frontend.mkdir()
+    fake_record_file = tmp_path / "record.py"
+
+    with (
+        # Ensure playwright check passes regardless of whether it is installed
+        patch("intracktive.record.sync_playwright", MagicMock()),
+        patch("intracktive.record.shutil.which", return_value="/usr/bin/ffmpeg"),
+        patch("intracktive.record.open_file", return_value=zarr_path),
+        patch("intracktive.record.serve_directory"),
+        patch("intracktive.record.__file__", str(fake_record_file)),
+        pytest.raises(Exception, match="frontend"),
+    ):
+        record_file(input_path=zarr_path, output=tmp_path / "out.mp4")
+
+
+def test_record_file_calls_ffmpeg_correctly(tmp_path: Path) -> None:
+    """
+    record_file invokes ffmpeg with the correct arguments for the given fps and
+    output path when Playwright succeeds.
+
+    Skipped when no bundled frontend is installed (requires 'npm run build:python').
+    """
+    frontend_path = Path(__file__).parent.parent / "frontend"
+    if not (frontend_path.exists() and (frontend_path / "index.html").exists()):
+        pytest.skip("No bundled frontend available — run 'npm run build:python' first")
+
+    zarr_path = _make_valid_zarr(tmp_path)
+    output_path = tmp_path / "output.mp4"
+    fps = 10
+    skip = 1
+    num_times = 3
+
+    mock_sync_playwright, mock_page = _make_playwright_mock(num_times=num_times)
+
+    with (
+        patch("intracktive.record.shutil.which", return_value="/usr/bin/ffmpeg"),
+        patch("intracktive.record.open_file", return_value=zarr_path),
+        patch("intracktive.record.serve_directory"),
+        patch("intracktive.record.sync_playwright", mock_sync_playwright, create=True),
+        patch("intracktive.record.subprocess.run") as mock_run,
+    ):
+        record_file(input_path=zarr_path, output=output_path, fps=fps, skip=skip)
+
+    # ffmpeg must have been called exactly once
+    mock_run.assert_called_once()
+    ffmpeg_args: list = mock_run.call_args[0][0]
+
+    assert ffmpeg_args[0] == "ffmpeg"
+    assert "-framerate" in ffmpeg_args
+    assert str(fps) in ffmpeg_args
+    assert str(output_path) in ffmpeg_args
+
+    # All num_times frames should have been captured (skip=1)
+    expected_frames = len(range(0, num_times, skip))
+    screenshot_calls = mock_page.locator.return_value.first.screenshot.call_count
+    assert screenshot_calls == expected_frames
+
+
+def test_record_file_skip_parameter(tmp_path: Path) -> None:
+    """
+    record_file respects the skip parameter: only every N-th timepoint is
+    captured, reducing the screenshot() call count accordingly.
+    range(0, 10, 3) -> [0, 3, 6, 9] -> 4 frames.
+    """
+    frontend_path = Path(__file__).parent.parent / "frontend"
+    if not (frontend_path.exists() and (frontend_path / "index.html").exists()):
+        pytest.skip("No bundled frontend available — run 'npm run build:python' first")
+
+    zarr_path = _make_valid_zarr(tmp_path)
+    num_times = 10
+    skip = 3
+    expected_frames = len(range(0, num_times, skip))
+
+    mock_sync_playwright, mock_page = _make_playwright_mock(num_times=num_times)
+
+    with (
+        patch("intracktive.record.shutil.which", return_value="/usr/bin/ffmpeg"),
+        patch("intracktive.record.open_file", return_value=zarr_path),
+        patch("intracktive.record.serve_directory"),
+        patch("intracktive.record.sync_playwright", mock_sync_playwright, create=True),
+        patch("intracktive.record.subprocess.run"),
+    ):
+        record_file(input_path=zarr_path, output=tmp_path / "out.mp4", skip=skip)
+
+    screenshot_calls = mock_page.locator.return_value.first.screenshot.call_count
+    assert screenshot_calls == expected_frames
+
+
+def test_record_cli_command_registered() -> None:
+    """The 'record' subcommand is registered on the CLI and exposes its options."""
+    from click.testing import CliRunner as CR
+
+    runner = CR()
+    result = runner.invoke(main, ["record", "--help"])
+    assert result.exit_code == 0
+    assert "--fps" in result.output
+    assert "--skip" in result.output
+    assert "--output" in result.output
+    assert "--quality" in result.output
