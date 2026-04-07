@@ -6,7 +6,6 @@ import time
 from pathlib import Path
 
 import click
-
 from intracktive.createHash import generate_viewer_state_hash
 from intracktive.open import open_file
 from intracktive.server import DEFAULT_HOST, find_available_port, serve_directory
@@ -22,9 +21,9 @@ LOG.setLevel(logging.INFO)
 # Mirrors the quality presets in SaveVideoButton.tsx.
 # ffmpeg CRF: lower = better quality / larger file (0 = lossless, 23 = ffmpeg default).
 QUALITY_PRESETS: dict[str, int] = {
-    "low":   28,
+    "low": 28,
     "medium": 22,
-    "high":  18,
+    "high": 18,
     "ultra": 12,
 }
 
@@ -89,7 +88,9 @@ def record_file(
     # Start the data server
     zarr_dir = zarr_path.parent
     frontend_path = Path(__file__).parent / "frontend"
-    use_local_frontend = frontend_path.exists() and (frontend_path / "index.html").exists()
+    use_local_frontend = (
+        frontend_path.exists() and (frontend_path / "index.html").exists()
+    )
 
     data_port = find_available_port(8000)
     data_url = f"http://{DEFAULT_HOST}:{data_port}/{zarr_path.name}/"
@@ -97,7 +98,9 @@ def record_file(
 
     if use_local_frontend:
         frontend_port = find_available_port(data_port + 1)
-        serve_directory(path=frontend_path, host=DEFAULT_HOST, port=frontend_port, threaded=True)
+        serve_directory(
+            path=frontend_path, host=DEFAULT_HOST, port=frontend_port, threaded=True
+        )
         base_url = f"http://{DEFAULT_HOST}:{frontend_port}"
     else:
         raise click.UsageError(
@@ -126,7 +129,9 @@ def record_file(
 
             num_times: int = page.evaluate("window.__intracktive_numTimes")
             if not num_times:
-                raise click.UsageError("Could not determine number of timepoints from the app.")
+                raise click.UsageError(
+                    "Could not determine number of timepoints from the app."
+                )
 
             frames_to_capture = list(range(0, num_times, skip))
             LOG.info(
@@ -160,13 +165,20 @@ def record_file(
         crf = QUALITY_PRESETS[quality]
         LOG.info("Encoding MP4 (quality=%s, CRF=%d)...", quality, crf)
         ffmpeg_cmd = [
-            "ffmpeg", "-y",
-            "-framerate", str(fps),
-            "-i", str(tmp_path / "frame%05d.png"),
-            "-c:v", "libx264",
-            "-crf", str(crf),
-            "-preset", "slow",
-            "-pix_fmt", "yuv420p",
+            "ffmpeg",
+            "-y",
+            "-framerate",
+            str(fps),
+            "-i",
+            str(tmp_path / "frame%05d.png"),
+            "-c:v",
+            "libx264",
+            "-crf",
+            str(crf),
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
             str(output),
         ]
         subprocess.run(ffmpeg_cmd, check=True)
@@ -180,7 +192,8 @@ def record_file(
     type=click.Path(exists=True, path_type=Path),
 )
 @click.option(
-    "--output", "-o",
+    "--output",
+    "-o",
     type=click.Path(path_type=Path),
     default=Path("intracktive.mp4"),
     show_default=True,
