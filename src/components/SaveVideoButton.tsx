@@ -41,6 +41,7 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
+    IconButton,
     LinearProgress,
     TextField,
     ToggleButton,
@@ -48,6 +49,7 @@ import {
     Tooltip,
     Typography,
 } from "@mui/material";
+import MovieIcon from "@mui/icons-material/Movie";
 
 // ---------------------------------------------------------------------------
 // Shared types (RecordingConfig is also imported by App.tsx)
@@ -444,14 +446,12 @@ export default function SaveVideoButton({
         <>
             <Tooltip title="Save video of current view">
                 <span>
-                    <Button
-                        icon="Download"
-                        sdsSize="large"
-                        sdsType="secondary"
-                        sdsStyle="icon"
+                    <IconButton
                         disabled={numTimes === 0}
                         onClick={() => setButtonState("dialog")}
-                    />
+                    >
+                        <MovieIcon />
+                    </IconButton>
                 </span>
             </Tooltip>
 
