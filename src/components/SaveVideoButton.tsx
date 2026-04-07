@@ -446,10 +446,7 @@ export default function SaveVideoButton({
         <>
             <Tooltip title="Save video of current view">
                 <span>
-                    <IconButton
-                        disabled={numTimes === 0}
-                        onClick={() => setButtonState("dialog")}
-                    >
+                    <IconButton disabled={numTimes === 0} onClick={() => setButtonState("dialog")}>
                         <MovieIcon />
                     </IconButton>
                 </span>
