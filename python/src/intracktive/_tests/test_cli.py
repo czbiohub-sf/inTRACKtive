@@ -625,7 +625,9 @@ def _make_browser_mock(num_times: int = 3):
     mock_download_ctx.value = mock_download
 
     mock_page = MagicMock()
-    mock_page.evaluate.side_effect = lambda expr: num_times if "numTimes" in expr else None
+    mock_page.evaluate.side_effect = (
+        lambda expr: num_times if "numTimes" in expr else None
+    )
     mock_page.expect_download.return_value = mock_download_ctx
 
     mock_browser = MagicMock()
@@ -635,7 +637,9 @@ def _make_browser_mock(num_times: int = 3):
     mock_playwright_instance.chromium.launch.return_value = mock_browser
 
     mock_sync_playwright = MagicMock()
-    mock_sync_playwright.return_value.__enter__ = MagicMock(return_value=mock_playwright_instance)
+    mock_sync_playwright.return_value.__enter__ = MagicMock(
+        return_value=mock_playwright_instance
+    )
     mock_sync_playwright.return_value.__exit__ = MagicMock(return_value=False)
 
     return mock_sync_playwright, mock_page, mock_download

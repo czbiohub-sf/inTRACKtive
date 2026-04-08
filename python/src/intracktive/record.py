@@ -108,6 +108,11 @@ def record_url(
             num_times,
             quality,
         )
+        # Wait until SaveVideoButton has registered __intracktive_startRecording on the window.
+        page.wait_for_function(
+            "typeof window.__intracktive_startRecording === 'function'",
+            timeout=30_000,
+        )
         # Give Three.js a moment to render the first frame before capturing.
         page.wait_for_timeout(500)
         # Allow up to 3 s per frame, minimum 2 minutes.
@@ -133,7 +138,8 @@ def record_url(
 @click.command("record")
 @click.argument("url")
 @click.option(
-    "--output", "-o",
+    "--output",
+    "-o",
     type=click.Path(path_type=Path),
     default=Path("intracktive.mp4"),
     show_default=True,

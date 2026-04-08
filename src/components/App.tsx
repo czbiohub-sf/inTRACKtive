@@ -296,13 +296,6 @@ export default function App() {
         (window as unknown as Record<string, unknown>).__intracktive_numTimes = numTimes;
     }, [isLoadingPoints, numLoadingTracks, numTimes]);
 
-    useEffect(() => {
-        // eslint-disable-next-line camelcase
-        (window as unknown as Record<string, unknown>).__intracktive_setTime = (t: number) => {
-            dispatchCanvas({ type: ActionType.CUR_TIME, curTime: t });
-        };
-    }, [dispatchCanvas]);
-
     // Frame-by-frame recording capture loop
     useEffect(() => {
         if (!recordingState?.active) return;
@@ -354,30 +347,33 @@ export default function App() {
         dispatchCanvas,
     ]);
 
-    const startRecording = (config: RecordingConfig) => {
-        setPlaying(false);
-        dispatchCanvas({ type: ActionType.CUR_TIME, curTime: 0 });
+    const startRecording = useCallback(
+        (config: RecordingConfig) => {
+            setPlaying(false);
+            dispatchCanvas({ type: ActionType.CUR_TIME, curTime: 0 });
 
-        const el = canvas.renderer.domElement;
-        const origW = el.clientWidth;
-        const origH = el.clientHeight;
-        const origPointSize = canvas.pointSize;
-        const scale = Math.max(2, window.devicePixelRatio || 1);
+            const el = canvas.renderer.domElement;
+            const origW = el.clientWidth;
+            const origH = el.clientHeight;
+            const origPointSize = canvas.pointSize;
+            const scale = Math.max(2, window.devicePixelRatio || 1);
 
-        // updateStyle: false enlarges the pixel buffer without changing CSS layout
-        dispatchCanvas({ type: ActionType.SIZE, width: origW * scale, height: origH * scale, updateStyle: false });
-        // Scale point size so dots appear the same size in the output video
-        dispatchCanvas({ type: ActionType.POINT_SIZES, pointSize: origPointSize * scale });
+            // updateStyle: false enlarges the pixel buffer without changing CSS layout
+            dispatchCanvas({ type: ActionType.SIZE, width: origW * scale, height: origH * scale, updateStyle: false });
+            // Scale point size so dots appear the same size in the output video
+            dispatchCanvas({ type: ActionType.POINT_SIZES, pointSize: origPointSize * scale });
 
-        setRecordingState({
-            active: true,
-            config,
-            targetTime: 0,
-            capturedFrames: [],
-            justAdvanced: true,
-            originalSize: { width: origW, height: origH, pointSize: origPointSize },
-        });
-    };
+            setRecordingState({
+                active: true,
+                config,
+                targetTime: 0,
+                capturedFrames: [],
+                justAdvanced: true,
+                originalSize: { width: origW, height: origH, pointSize: origPointSize },
+            });
+        },
+        [canvas.pointSize, canvas.renderer.domElement, dispatchCanvas, setPlaying],
+    );
 
     const cancelRecording = useCallback(() => {
         setRecordingState((prev) => {
