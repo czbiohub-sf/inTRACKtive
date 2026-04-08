@@ -262,6 +262,8 @@ async function encodeWithWebCodecs(
 
     console.log(`[SaveVideo] Using codec: ${chosen.label} (${chosen.encoderCodec})`);
 
+    // H.264 in MP4 requires AVCC bitstream format (not Annex B).
+    // Without this, mp4-muxer produces a malformed container that QuickTime rejects.
     const config: VideoEncoderConfig = {
         codec: chosen.encoderCodec,
         width,
@@ -269,6 +271,7 @@ async function encodeWithWebCodecs(
         bitrate: bitrateRaw,
         framerate: outputFps,
     };
+    if (chosen.muxerCodec === "avc") config.avc = { format: "avc" };
 
     // mp4-muxer accumulates the encoded data in memory
     const target = new ArrayBufferTarget();

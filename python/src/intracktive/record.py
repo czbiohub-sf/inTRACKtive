@@ -82,14 +82,18 @@ def record_url(
     bitrate_mbps = QUALITY_PRESETS[quality]
 
     with sync_playwright() as p:
+        # Prefer Google Chrome (has H.264) over bundled Chromium (no H.264 on Linux).
         try:
-            browser = p.chromium.launch(headless=False)
-        except Exception as exc:
-            if "Executable doesn't exist" in str(exc):
-                raise click.UsageError(
-                    "Playwright browser not found. Run: playwright install chromium"
-                ) from exc
-            raise
+            browser = p.chromium.launch(channel="chrome", headless=False)
+        except Exception:
+            try:
+                browser = p.chromium.launch(headless=False)
+            except Exception as exc:
+                if "Executable doesn't exist" in str(exc):
+                    raise click.UsageError(
+                        "Playwright browser not found. Run: playwright install chromium"
+                    ) from exc
+                raise
         page = browser.new_page(viewport={"width": width, "height": height})
 
         LOG.info("Loading app (this may take a moment for large datasets)...")
