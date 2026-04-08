@@ -70,9 +70,13 @@ def record_url(
         raise click.UsageError(
             "No bundled frontend found. Run 'npm run build:python' first."
         )
-    port = find_available_port(8000)
-    serve_directory(path=frontend_path, host=DEFAULT_HOST, port=port, threaded=True)
-    local_url = f"http://{DEFAULT_HOST}:{port}/#{fragment}"
+    server_url = serve_directory(
+        path=frontend_path,
+        host=DEFAULT_HOST,
+        port=find_available_port(8000),
+        threaded=True,
+    )
+    local_url = f"{server_url}/#{fragment}"
     LOG.info("App URL: %s", local_url)
 
     bitrate_mbps = QUALITY_PRESETS[quality]
