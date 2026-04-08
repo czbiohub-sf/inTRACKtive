@@ -80,6 +80,8 @@ export default function App() {
     // show a warning dialog before fetching lots of tracks
     const [showWarningDialog, setShowWarningDialog] = useState(false);
     const [numUnfetchedPoints, setNumUnfetchedPoints] = useState(0);
+    const [pendingTrackLoader, setPendingTrackLoader] = useState<(() => void) | null>(null);
+    const [warningMessage, setWarningMessage] = useState<string | undefined>(undefined);
 
     // Manage shareable state that can persist across sessions.
     const copyShareableUrlToClipboard = () => {
@@ -167,6 +169,62 @@ export default function App() {
 
         await Promise.allSettled(allTrackPromises);
         console.log("All tracks have been rendered on the canvas");
+    };
+
+    // loads only the annotated tracks directly, without expanding to the full lineage
+    const loadTissueTracks = async () => {
+        if (!trackManager) return;
+        const attributeIndex = canvas.colorByEvent.label - numberOfDefaultColorByOptions;
+        const pointIds = trackManager.annotPointIds?.[attributeIndex];
+        if (!pointIds) return;
+
+        // Mark as fetched before dispatching so the selectedPointIds useEffect
+        // sees numUnfetchedPoints = 0 and does not trigger updateTracks.
+        for (const pointId of pointIds) {
+            canvas.fetchedPointIds.add(pointId);
+        }
+        dispatchCanvas({
+            type: ActionType.ADD_SELECTED_POINT_IDS,
+            selectedPointIndices: [],
+            selectedPointIds: new Set(pointIds),
+        });
+
+        const allTrackPromises: Promise<void>[] = [];
+
+        for (const pointId of pointIds) {
+            setNumLoadingTracks((n) => n + 1);
+            const trackPromise = trackManager.fetchTrackIDsForPoint(pointId).then(async (trackIds) => {
+                for (const trackId of trackIds) {
+                    if (canvas.tracks.has(trackId)) continue;
+                    const [pos, ids] = await trackManager.fetchPointsForTrack(trackId);
+                    canvas.addTrack(trackId, pos, ids, -1);
+                    dispatchCanvas({ type: ActionType.REFRESH });
+                }
+            });
+            allTrackPromises.push(trackPromise);
+            trackPromise.finally(() => setNumLoadingTracks((n) => n - 1));
+        }
+
+        await Promise.allSettled(allTrackPromises);
+        console.log("All tissue tracks have been rendered on the canvas");
+    };
+
+    const handleTissueTracks = () => {
+        if (!trackManager) return;
+        const attributeIndex = canvas.colorByEvent.label - numberOfDefaultColorByOptions;
+        const pointIds = trackManager.annotPointIds?.[attributeIndex];
+        if (!pointIds) return;
+
+        if (pointIds.length > maxNumSelectedCells) {
+            setNumUnfetchedPoints(pointIds.length);
+            setPendingTrackLoader(() => loadTissueTracks);
+            setWarningMessage(
+                `This will load ${pointIds.length} tissue tracks, which might take a long time. Continue?`,
+            );
+            setShowWarningDialog(true);
+        } else {
+            loadTissueTracks();
+        }
     };
 
     // remove the just selected points from selectedPointIds if user 'cancels' the fetching of tracks
@@ -282,6 +340,10 @@ export default function App() {
         // if many cells are selected, let the user decide whether to fetch or cancel
         if (numUnfetchedPoints > maxNumSelectedCells) {
             setNumUnfetchedPoints(numUnfetchedPoints);
+            setPendingTrackLoader(() => updateTracks);
+            setWarningMessage(
+                `This will load the full lineage of ${numUnfetchedPoints} annotated cells, which may include many more tracks and could take a long time. Continue?`,
+            );
             setShowWarningDialog(true);
         } else {
             updateTracks();
@@ -422,10 +484,11 @@ export default function App() {
                                         selectedPointIds: pointIds,
                                     });
                                 }}
+                                onLoadTissueTracks={handleTissueTracks}
                             />
                             <Divider sx={{ marginY: "1em" }} />
                             <LeftSidebarWrapper
-                                hasTracks={numSelectedCells > 0}
+                                hasTracks={numSelectedCells > 0 || numSelectedTracks > 0}
                                 trackManager={trackManager}
                                 trackHighlightLength={trackHighlightLength}
                                 selectionMode={canvas.selector.selectionMode}
@@ -573,13 +636,17 @@ export default function App() {
             <WarningDialog
                 open={showWarningDialog}
                 numUnfetchedPoints={numUnfetchedPoints}
+                message={warningMessage}
                 onCloseAction={() => {
                     setShowWarningDialog(false);
+                    setWarningMessage(undefined);
                     removeLastSelectedPoints(); // no fetching, remove selection
                 }}
                 onContinueAction={() => {
                     setShowWarningDialog(false);
-                    updateTracks(); // Continue loading tracks
+                    setWarningMessage(undefined);
+                    pendingTrackLoader?.();
+                    setPendingTrackLoader(null);
                 }}
             />
         </Box>

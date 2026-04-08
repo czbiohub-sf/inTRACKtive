@@ -370,6 +370,9 @@ export class PointCanvas {
     }
 
     highlightPoints(points: number[]) {
+        // When coloring by a hex-binary attribute, cells already carry meaningful
+        // annotation colors — don't override them with the selection highlight.
+        if (this.colorByEvent.type === "hex-binary") return;
         const colorAttribute = this.points.geometry.getAttribute("color");
         const color = new Color();
         color.setRGB(highlightPointColor[0], highlightPointColor[1], highlightPointColor[2], SRGBColorSpace); // pink

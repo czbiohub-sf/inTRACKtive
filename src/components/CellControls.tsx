@@ -21,6 +21,7 @@ interface CellControlsProps {
     colorBy: boolean;
     colorByEvent: Option;
     onSelectBinaryValue: (ids: Set<number>) => void;
+    onLoadTissueTracks: () => void;
 }
 
 export default function CellControls(props: CellControlsProps) {
@@ -68,7 +69,8 @@ export default function CellControls(props: CellControlsProps) {
             {props.trackManager &&
                 props.colorBy &&
                 props.colorByEvent.type === "hex-binary" &&
-                (props.numSelectedCells ?? 0) == 0 && (
+                (props.numSelectedCells ?? 0) == 0 &&
+                (props.numSelectedTracks ?? 0) == 0 && (
                     <Tooltip
                         title={
                             !props.trackManager.annotPointIds
@@ -77,14 +79,24 @@ export default function CellControls(props: CellControlsProps) {
                         }
                     >
                         <span>
-                            <Button
-                                sdsStyle="square"
-                                sdsType="primary"
-                                onClick={handleBinarySelection}
-                                disabled={!props.trackManager.annotPointIds}
-                            >
-                                Load tracks for annotated cells
-                            </Button>
+                            <Stack spacing="0.5em">
+                                <Button
+                                    sdsStyle="square"
+                                    sdsType="primary"
+                                    onClick={props.onLoadTissueTracks}
+                                    disabled={!props.trackManager.annotPointIds}
+                                >
+                                    Load tissue tracks
+                                </Button>
+                                <Button
+                                    sdsStyle="square"
+                                    sdsType="secondary"
+                                    onClick={handleBinarySelection}
+                                    disabled={!props.trackManager.annotPointIds}
+                                >
+                                    Load full lineage
+                                </Button>
+                            </Stack>
                         </span>
                     </Tooltip>
                 )}
