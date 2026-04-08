@@ -178,6 +178,7 @@ export class TrackManager {
     defaultExtent: number;
     ndim: number;
     annotPointIds: number[][] | null;
+    fatemapHexAttributeIndex: number | null;
 
     constructor(
         store: string,
@@ -189,6 +190,7 @@ export class TrackManager {
         attributeOptions: Option[],
         scaleSettings: ScaleSettings,
         annotPointIds: number[][] | null,
+        fatemapHexAttributeIndex: number | null,
     ) {
         this.store = store;
         this.points = points;
@@ -203,6 +205,7 @@ export class TrackManager {
         this.defaultExtent = 1; // pointcloud is centered around (0,0,0) with an extent of 1
         this.ndim = 3;
         this.annotPointIds = annotPointIds;
+        this.fatemapHexAttributeIndex = fatemapHexAttributeIndex;
     }
 
     async fetchPointsAtTime(timeIndex: number): Promise<Float32Array> {
@@ -357,6 +360,7 @@ export async function loadTrackManager(url: string) {
 
         let attributes = null;
         let annotPointIds: number[][] | null = null;
+        let fatemapHexAttributeIndex: number | null = null;
         let attributeOptions: Option[] = resetDropDownOptions();
         try {
             attributes = await openArray({
@@ -370,6 +374,8 @@ export async function loadTrackManager(url: string) {
 
             annotPointIds = zattrs["annot_point_ids"] ?? null;
             console.debug("annotPointIds:", annotPointIds);
+            const fatemapIdx = (zattrs["attribute_names"] as string[]).indexOf("fatemap_hex");
+            fatemapHexAttributeIndex = fatemapIdx >= 0 ? fatemapIdx : null;
             for (let column = 0; column < zattrs["attribute_names"].length; column++) {
                 addDropDownOption(attributeOptions, {
                     name: zattrs["attribute_names"][column],
@@ -396,6 +402,7 @@ export async function loadTrackManager(url: string) {
             attributeOptions,
             scaleSettings,
             annotPointIds,
+            fatemapHexAttributeIndex,
         );
         if (numberOfValuesPerPoint == 4) {
             trackManager.maxPointsPerTimepoint = trackManager.points.shape[1] / numberOfValuesPerPoint;

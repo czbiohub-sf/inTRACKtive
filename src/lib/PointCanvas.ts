@@ -31,6 +31,7 @@ import { buildHighlightLUTTexture } from "@/lib/three/TrackMaterial";
 
 import deviceState from "./DeviceState.ts";
 import config from "../../CONFIG.ts";
+const NO_ANNOTATION_VALUE = 4210752; // hex #404040, "no annotation" sentinel for hex-binary attributes
 const initialPointSize = config.settings.point_size;
 const pointColor = config.settings.point_color;
 const highlightPointColor = config.settings.highlight_point_color;
@@ -98,6 +99,7 @@ export class PointCanvas {
     colormapCellsCategorical: string = defaultColormapColorbyCategorical;
     colormapCellsContinuous: string = defaultColormapColorbyContinuous;
     currentAttributes: number[] | Float32Array = new Float32Array();
+    currentFatemapAttributes: Float32Array | null = null;
     private previousNumValues: number | undefined = undefined;
 
     constructor(width: number, height: number) {
@@ -459,15 +461,43 @@ export class PointCanvas {
                 colorAttribute.setXYZ(i, color.r, color.g, color.b);
             }
         } else if (this.colorByEvent.type === "hex" || this.colorByEvent.type === "hex-binary") {
+            // For hex-binary with fatemap coloring: build a set of cell indices belonging to
+            // loaded tracks at the current timepoint. Computed inline to avoid stale selectedPointIndices
+            // (resetPointColors runs before updateSelectedPointIndices in POINTS_POSITIONS).
+            // Compute which cell indices belong to loaded tracks at this timepoint.
+            // Done whenever tracks exist — independent of fatemap availability —
+            // so that brightness contrast works for both Button 1 and Button 2.
+            let trackCellsAtCurrentTime: Set<number> | null = null;
+            if (this.colorByEvent.type === "hex-binary" && this.tracks.size > 0) {
+                trackCellsAtCurrentTime = new Set<number>();
+                const idOffset = this.curTime * this.maxPointsPerTimepoint;
+                for (const track of this.tracks.values()) {
+                    if (this.curTime < track.threeTrack.startTime || this.curTime > track.threeTrack.endTime) continue;
+                    const timeIndex = this.curTime - track.threeTrack.startTime;
+                    const pointId = track.threeTrack.pointIds[timeIndex];
+                    trackCellsAtCurrentTime.add(pointId - idOffset);
+                }
+            }
+
             for (let i = 0; i < numPoints; i++) {
-                const hexInt = attributes[i]; // must be [0 1]
+                let hexInt = attributes[i];
                 if (hexInt === undefined) {
                     console.warn("Invalid hexInt value:", hexInt);
-                    continue; // skip this iteration
+                    continue;
+                }
+                // Grey cell in a loaded lineage track → substitute with fatemap_hex color (Button 2 only)
+                if (
+                    hexInt === NO_ANNOTATION_VALUE &&
+                    trackCellsAtCurrentTime?.has(i) &&
+                    this.currentFatemapAttributes !== null
+                ) {
+                    hexInt = this.currentFatemapAttributes[i] ?? NO_ANNOTATION_VALUE;
                 }
                 const hexStr = `#${hexInt.toString(16).padStart(6, "0").toUpperCase()}`;
                 const color = new Color(hexStr);
-                color.multiplyScalar(this.pointBrightness);
+                // Cells in loaded tracks stay at full brightness; others dim with pointBrightness
+                const brightness = trackCellsAtCurrentTime?.has(i) ? 1.0 : this.pointBrightness;
+                color.multiplyScalar(brightness);
                 colorAttribute.setXYZ(i, color.r, color.g, color.b);
             }
         } else {
@@ -690,6 +720,7 @@ export class PointCanvas {
     }
 
     removeAllTracks() {
+        this.currentFatemapAttributes = null;
         this.selectedPointIds = new Set();
         this.selectedPointIndices = [];
         this.fetchedRootTrackIds.clear();

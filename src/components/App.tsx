@@ -108,6 +108,20 @@ export default function App() {
         dispatchCanvas({ type: ActionType.TOGGLE_COLOR_BY, colorBy: false });
     };
 
+    // Fetches fatemap attributes for the current timepoint (if lineage mode is active),
+    // stores them directly on the canvas, then resets point colors.
+    // Called after any track loading completes so coloring applies immediately.
+    const finalizeTrackLoading = async () => {
+        let fatemapAttributes: Float32Array | undefined;
+        if (trackManager !== null && canvas.colorByEvent.type === "hex-binary" && trackManager.fatemapHexAttributeIndex !== null) {
+            fatemapAttributes = await trackManager.fetchAttributesAtTime(
+                canvas.curTime,
+                trackManager.fatemapHexAttributeIndex,
+            );
+        }
+        dispatchCanvas({ type: ActionType.RESET_POINTS_COLORS, fatemapAttributes });
+    };
+
     // this function fetches the entire lineage for each track, using Promise.allSettled
     // to keep the loading indicator visible until all tracks have been rendered
     const updateTracks = async () => {
@@ -169,6 +183,7 @@ export default function App() {
 
         await Promise.allSettled(allTrackPromises);
         console.log("All tracks have been rendered on the canvas");
+        await finalizeTrackLoading();
     };
 
     // loads only the annotated tracks directly, without expanding to the full lineage
@@ -207,6 +222,7 @@ export default function App() {
 
         await Promise.allSettled(allTrackPromises);
         console.log("All tissue tracks have been rendered on the canvas");
+        await finalizeTrackLoading();
     };
 
     const handleTissueTracks = () => {
@@ -300,10 +316,18 @@ export default function App() {
                     );
                 }
 
+                let fatemapAttributes: Float32Array | undefined;
+                if (canvas.colorByEvent.type === "hex-binary" && trackManager.fatemapHexAttributeIndex !== null && canvas.tracks.size > 0) {
+                    fatemapAttributes = await trackManager.fetchAttributesAtTime(
+                        time,
+                        trackManager.fatemapHexAttributeIndex,
+                    );
+                }
+
                 // clearing the timeout prevents the loading indicator from showing at all if the fetch is fast
                 clearTimeout(loadingTimeout);
                 setIsLoadingPoints(false);
-                dispatchCanvas({ type: ActionType.POINTS_POSITIONS, positions: data, attributes });
+                dispatchCanvas({ type: ActionType.POINTS_POSITIONS, positions: data, attributes, fatemapAttributes });
             };
             getPoints(canvas.curTime);
         } else {

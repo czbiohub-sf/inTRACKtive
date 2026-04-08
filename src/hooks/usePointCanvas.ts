@@ -84,10 +84,12 @@ interface PointsPositions {
     type: ActionType.POINTS_POSITIONS;
     positions: Float32Array;
     attributes: Float32Array | undefined;
+    fatemapAttributes?: Float32Array;
 }
 
 interface ResetPointColors {
     type: ActionType.RESET_POINTS_COLORS;
+    fatemapAttributes?: Float32Array;
 }
 
 interface RemoveLastSelection {
@@ -259,12 +261,17 @@ function reducer(canvas: PointCanvas, action: PointCanvasAction): PointCanvas {
             break;
         case ActionType.POINTS_POSITIONS:
             newCanvas.setPointsPositions(action.positions);
+            newCanvas.currentFatemapAttributes = action.fatemapAttributes ?? null;
             newCanvas.resetPointColors(action.attributes);
             newCanvas.updateSelectedPointIndices();
             newCanvas.updatePreviewPoints();
             break;
         case ActionType.RESET_POINTS_COLORS:
+            if (action.fatemapAttributes !== undefined) {
+                newCanvas.currentFatemapAttributes = action.fatemapAttributes;
+            }
             newCanvas.resetPointColors();
+            newCanvas.updateSelectedPointIndices();
             break;
         case ActionType.REMOVE_LAST_SELECTION:
             newCanvas.removeLastSelection();
