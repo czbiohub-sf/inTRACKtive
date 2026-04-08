@@ -11,6 +11,7 @@ from geff.testing.data import create_mock_geff
 from intracktive.convert import zarr_to_browser
 from intracktive.main import main
 from intracktive.open import open_file
+from intracktive.record import QUALITY_PRESETS, record_url
 
 
 def _run_command(command_and_args: List[str]) -> None:
@@ -604,3 +605,130 @@ def test_zarr_to_browser_no_browser_flag(tmp_path: Path) -> None:
         # Data server + frontend server (when bundled frontend is available) = 2 calls,
         # or just 1 call when falling back to the external URL.
         assert mock_serve_directory.call_count in (1, 2)
+
+
+# ---------------------------------------------------------------------------
+# record_url tests
+# ---------------------------------------------------------------------------
+
+_DUMMY_URL = "https://example.com/#viewerState=%7B%22dataUrl%22%3A%22https%3A%2F%2Fexample.com%2Fdata.zarr%22%7D"
+
+
+def _make_browser_mock(num_times: int = 3):
+    """Return (mock_sync_playwright, mock_page, mock_download) mimicking Playwright's browser API."""
+    from unittest.mock import MagicMock
+
+    mock_download = MagicMock()
+    mock_download_ctx = MagicMock()
+    mock_download_ctx.__enter__ = MagicMock(return_value=mock_download_ctx)
+    mock_download_ctx.__exit__ = MagicMock(return_value=False)
+    mock_download_ctx.value = mock_download
+
+    mock_page = MagicMock()
+    mock_page.evaluate.side_effect = (
+        lambda expr: num_times if "numTimes" in expr else None
+    )
+    mock_page.expect_download.return_value = mock_download_ctx
+
+    mock_browser = MagicMock()
+    mock_browser.new_page.return_value = mock_page
+
+    mock_playwright_instance = MagicMock()
+    mock_playwright_instance.chromium.launch.return_value = mock_browser
+
+    mock_sync_playwright = MagicMock()
+    mock_sync_playwright.return_value.__enter__ = MagicMock(
+        return_value=mock_playwright_instance
+    )
+    mock_sync_playwright.return_value.__exit__ = MagicMock(return_value=False)
+
+    return mock_sync_playwright, mock_page, mock_download
+
+
+def test_record_url_invalid_quality(tmp_path: Path) -> None:
+    """record_url raises UsageError for an unrecognised quality value."""
+    from unittest.mock import MagicMock
+
+    with (
+        patch("intracktive.record.sync_playwright", MagicMock()),
+        pytest.raises(Exception, match="quality"),
+    ):
+        record_url(url=_DUMMY_URL, output=tmp_path / "out.mp4", quality="ultra_hd")
+
+
+def test_record_url_missing_playwright(tmp_path: Path) -> None:
+    """record_url raises UsageError when playwright is not installed."""
+    with (
+        patch("intracktive.record.sync_playwright", None),
+        pytest.raises(Exception, match="playwright"),
+    ):
+        record_url(url=_DUMMY_URL, output=tmp_path / "out.mp4")
+
+
+def test_record_url_no_frontend(tmp_path: Path) -> None:
+    """record_url raises UsageError when no bundled frontend is present."""
+    from unittest.mock import MagicMock
+
+    # Patch __file__ so the frontend path resolves to a dir without index.html.
+    empty_frontend = tmp_path / "frontend"
+    empty_frontend.mkdir()
+    fake_record_file = tmp_path / "record.py"
+
+    with (
+        patch("intracktive.record.sync_playwright", MagicMock()),
+        patch("intracktive.record.__file__", str(fake_record_file)),
+        pytest.raises(Exception, match="frontend"),
+    ):
+        record_url(url=_DUMMY_URL, output=tmp_path / "out.mp4")
+
+
+def test_record_url_start_recording_args(tmp_path: Path) -> None:
+    """
+    record_url calls __intracktive_startRecording with the correct fps, frameSkip,
+    bitrateMbps, and filename, then saves the download to the output path.
+
+    Skipped when no bundled frontend is installed (requires 'npm run build:python').
+    """
+    frontend_path = Path(__file__).parent.parent / "frontend"
+    if not (frontend_path.exists() and (frontend_path / "index.html").exists()):
+        pytest.skip("No bundled frontend — run 'npm run build:python' first")
+
+    fps = 15
+    skip = 2
+    quality = "low"
+    output = tmp_path / "out.mp4"
+
+    mock_sync_playwright, mock_page, mock_download = _make_browser_mock(num_times=5)
+
+    with (
+        patch("intracktive.record.serve_directory"),
+        patch("intracktive.record.find_available_port", return_value=8099),
+        patch("intracktive.record.sync_playwright", mock_sync_playwright, create=True),
+    ):
+        record_url(url=_DUMMY_URL, output=output, fps=fps, skip=skip, quality=quality)
+
+    # Find the evaluate call that triggered recording.
+    recording_calls = [
+        c for c in mock_page.evaluate.call_args_list if "startRecording" in str(c)
+    ]
+    assert len(recording_calls) == 1
+    call_str = str(recording_calls[0])
+    assert f"fps: {fps}" in call_str
+    assert f"frameSkip: {skip}" in call_str
+    assert f"bitrateMbps: {QUALITY_PRESETS[quality]}" in call_str
+    assert output.name in call_str
+
+    mock_download.save_as.assert_called_once_with(str(output))
+
+
+def test_record_cli_command_registered() -> None:
+    """The 'record' subcommand is registered on the CLI and exposes its options."""
+    from click.testing import CliRunner as CR
+
+    runner = CR()
+    result = runner.invoke(main, ["record", "--help"])
+    assert result.exit_code == 0
+    assert "--fps" in result.output
+    assert "--skip" in result.output
+    assert "--output" in result.output
+    assert "--quality" in result.output

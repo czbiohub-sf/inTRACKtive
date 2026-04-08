@@ -121,6 +121,7 @@ interface Size {
     type: ActionType.SIZE;
     width: number;
     height: number;
+    updateStyle?: boolean;
 }
 
 interface MinMaxTime {
@@ -301,7 +302,7 @@ function reducer(canvas: PointCanvas, action: PointCanvasAction): PointCanvas {
             newCanvas.updateAllTrackHighlights();
             break;
         case ActionType.SIZE:
-            newCanvas.setSize(action.width, action.height);
+            newCanvas.setSize(action.width, action.height, action.updateStyle);
             break;
         case ActionType.MIN_MAX_TIME:
             newCanvas.minTime = action.minTime;

@@ -102,7 +102,7 @@ export class PointCanvas {
 
     constructor(width: number, height: number) {
         this.scene = new Scene();
-        this.renderer = new WebGLRenderer();
+        this.renderer = new WebGLRenderer({ preserveDrawingBuffer: true });
 
         this.camera = new PerspectiveCamera(
             35, // FOV
@@ -536,11 +536,11 @@ export class PointCanvas {
         this.selectedPointIds = new Set(this.fetchedPointIds);
     }
 
-    setSize(width: number, height: number) {
+    setSize(width: number, height: number, updateStyle = true) {
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         this.bloomPass.resolution.set(width, height);
-        this.renderer.setSize(width, height);
+        this.renderer.setSize(width, height, updateStyle);
         this.composer.setSize(width, height);
     }
 

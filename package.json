@@ -22,6 +22,7 @@
     "@mui/icons-material": "^5.15.15",
     "@mui/lab": "^5.0.0-alpha.170",
     "@mui/material": "^5.15.15",
+    "mp4-muxer": "^5.2.2",
     "playwright": "^1.41.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
