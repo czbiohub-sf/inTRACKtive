@@ -354,7 +354,8 @@ export default function SaveVideoButton({
     }, [onStartRecording]);
 
     const bitrateMbps = QUALITY_PRESETS[quality].bitrateMbps;
-    const totalFramesToCapture = numTimes > 0 ? Math.ceil(numTimes / frameSkip) : 0;
+    const activeFrameSkip = recordingState?.config.frameSkip ?? frameSkip;
+    const totalFramesToCapture = numTimes > 0 ? Math.ceil(numTimes / activeFrameSkip) : 0;
     const capturedCount = recordingState?.capturedFrames.length ?? 0;
     const durationS = fps > 0 ? totalFramesToCapture / fps : 0;
     const estimatedMB = Math.round((bitrateMbps * durationS) / 8);
