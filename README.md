@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Contributors](https://img.shields.io/github/contributors-anon/royerlab/inTRACKtive)](https://github.com/royerlab/inTRACKtive/graphs/contributors)
 [![GitHub stars](https://img.shields.io/github/stars/royerlab/inTRACKtive?style=social)](https://github.com/royerlab/inTRACKtive/)
-[![GitHub forks](https://img.shields.io/github/forks/royerlab/inTRACKtive?style=social)](https://git:hub.com/royerlab/inTRACKtive/)
+[![GitHub forks](https://img.shields.io/github/forks/royerlab/inTRACKtive?style=social)](https://github.com/royerlab/inTRACKtive/)
 
 # inTRACKtive
 
@@ -158,23 +158,6 @@ intracktive open path/to/tracks.geff
 ```
 
 where the path is the full path to the file, including the filename (example: `~/Downloads/tracks_bundle.zarr`). This command will spin up a local host at the location of the Zarr bundle, and open a browser tab with `inTRACKtive` running with this dataset. If you `intracktive open` a CSV/Parquet/GEFF file, the command will first convert the input to our Zarr format and open that file. 
-
-To record an MP4 video of the visualization from the command line (without opening a browser), use `intracktive record`. This requires `playwright` and `ffmpeg`:
-
-```
-pip install 'intracktive[record]'          # install playwright
-playwright install chromium                # download headless browser
-brew install ffmpeg                        # or: sudo apt install ffmpeg
-```
-
-Then record:
-
-```
-intracktive record path/to/tracks_bundle.zarr
-intracktive record path/to/tracks.csv --fps 30 --skip 2 --output video.mp4
-```
-
-The command drives a headless browser through each timepoint, waits for data to fully load at each frame, and encodes the result with ffmpeg. Options: `--fps` (frame rate), `--skip N` (every N-th timepoint), `--output` (file path), `--quality` (low / medium / high / ultra), `--width` / `--height` (viewport in pixels).
 
 ---
 

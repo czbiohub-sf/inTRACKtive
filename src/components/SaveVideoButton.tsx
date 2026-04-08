@@ -343,6 +343,16 @@ export default function SaveVideoButton({
         detectBestCodecLabel().then(setAvailableCodecLabel);
     }, []);
 
+    // Expose a global trigger so the CLI can start recording without going through the dialog.
+    // Must live here (not App.tsx) so we can also set buttonState = "recording", which gates encoding.
+    useEffect(() => {
+        // eslint-disable-next-line camelcase
+        (window as unknown as Record<string, unknown>).__intracktive_startRecording = (config: RecordingConfig) => {
+            setButtonState("recording");
+            onStartRecording(config);
+        };
+    }, [onStartRecording]);
+
     const bitrateMbps = QUALITY_PRESETS[quality].bitrateMbps;
     const totalFramesToCapture = numTimes > 0 ? Math.ceil(numTimes / frameSkip) : 0;
     const capturedCount = recordingState?.capturedFrames.length ?? 0;
