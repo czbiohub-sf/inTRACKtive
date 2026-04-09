@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Contributors](https://img.shields.io/github/contributors-anon/royerlab/inTRACKtive)](https://github.com/royerlab/inTRACKtive/graphs/contributors)
 [![GitHub stars](https://img.shields.io/github/stars/royerlab/inTRACKtive?style=social)](https://github.com/royerlab/inTRACKtive/)
-[![GitHub forks](https://img.shields.io/github/forks/royerlab/inTRACKtive?style=social)](https://git:hub.com/royerlab/inTRACKtive/)
+[![GitHub forks](https://img.shields.io/github/forks/royerlab/inTRACKtive?style=social)](https://github.com/royerlab/inTRACKtive/)
 
 # inTRACKtive
 
@@ -53,6 +53,8 @@ See the image below with the explanation of the `inTRACKtive` UI:
     <em>Figure 1 - UI overview</em>
   </p>
 </p>
+
+> 🎬 **Save Video** — Click the download icon in the playback bar to export an MP4 of the current view. The viewer captures each timepoint frame-by-frame (waiting for data to fully load) and encodes the result using the browser-native WebCodecs API — no plugins required. Supported in Chrome/Edge/Safari; quality and frame rate can be configured in the dialog. On mobile or Firefox the button is hidden.
 
 ([↑Back to table of contents↑](#table-of-contents))
 
