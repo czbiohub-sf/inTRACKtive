@@ -1,4 +1,4 @@
-import { TrackManager, Option, numberOfValuesPerPoint } from "@/lib/TrackManager";
+import { TrackManager, Option } from "@/lib/TrackManager";
 import { TRACK_COLORMAP_NAMES, CELL_COLORMAP_NAMES, colormaps } from "@/lib/Colormaps";
 import { Dropdown, InputSlider, InputToggle } from "@czi-sds/components";
 import { Box, MenuItem, Select, SelectChangeEvent, Stack } from "@mui/material";
@@ -109,7 +109,7 @@ export default function TrackControls(props: TrackControlsProps) {
                     </label>
                     <Box>
                         <InputToggle
-                            id="show-tracks-highlights"
+                            id="show-track-highlights"
                             checked={props.showTrackHighlights}
                             onChange={(e) => {
                                 props.setShowTrackHighlights((e.target as HTMLInputElement).checked);
@@ -130,12 +130,12 @@ export default function TrackControls(props: TrackControlsProps) {
 
             {/* Axes toggle */}
             <Box display="flex" flexDirection="row" alignItems="center" justifyContent="space-between">
-                <label htmlFor="show-track-highlights">
+                <label htmlFor="show-axes">
                     <FontS>Axes</FontS>
                 </label>
                 <Box>
                     <InputToggle
-                        id="show-tracks-highlights"
+                        id="show-axes"
                         checked={props.axesVisible}
                         onChange={() => {
                             props.toggleAxesVisible();
@@ -194,7 +194,7 @@ export default function TrackControls(props: TrackControlsProps) {
                 )}
 
             {/* Cell size slider */}
-            {numberOfValuesPerPoint !== 4 && (
+            {props.trackManager?.numberOfValuesPerPoint !== 4 && (
                 <>
                     <label htmlFor="points-sizes-slider">
                         <FontS id="input-slider-points-sizes-slider">Cell Size</FontS>
@@ -203,7 +203,7 @@ export default function TrackControls(props: TrackControlsProps) {
                         style={{ marginTop: "-0.3em" }}
                         id="points-sizes-slider"
                         aria-labelledby="input-slider-points-sizes-slider"
-                        disabled={numberOfValuesPerPoint === 4}
+                        disabled={props.trackManager?.numberOfValuesPerPoint === 4}
                         min={0.05}
                         max={1}
                         step={0.01}

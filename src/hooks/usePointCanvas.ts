@@ -230,12 +230,10 @@ function reducer(canvas: PointCanvas, action: PointCanvasAction): PointCanvas {
             break;
         case ActionType.CUR_TIME: {
             // if curTime is a function, call it with the current time
-            if (typeof action.curTime === "function") {
-                action.curTime = action.curTime(canvas.curTime);
-            }
-            newCanvas.curTime = action.curTime;
-            newCanvas.minTime += action.curTime - canvas.curTime;
-            newCanvas.maxTime += action.curTime - canvas.curTime;
+            const newCurTime = typeof action.curTime === "function" ? action.curTime(canvas.curTime) : action.curTime;
+            newCanvas.curTime = newCurTime;
+            newCanvas.minTime += newCurTime - canvas.curTime;
+            newCanvas.maxTime += newCurTime - canvas.curTime;
             newCanvas.updateAllTrackHighlights();
             break;
         }
@@ -279,8 +277,6 @@ function reducer(canvas: PointCanvas, action: PointCanvasAction): PointCanvas {
         case ActionType.REMOVE_ALL_TRACKS:
             newCanvas.removeAllTracks();
             newCanvas.clearPointIndicesCache();
-            newCanvas.pointBrightness = 1.0;
-            newCanvas.resetPointColors();
             newCanvas.updatePreviewPoints();
             break;
         case ActionType.SELECTION_MODE: {

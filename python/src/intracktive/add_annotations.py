@@ -59,10 +59,12 @@ def add_annotated_point_ids(zarr_path: str | Path) -> None:
     indices = store["points_to_tracks/indices"][:]
 
     annot_point_ids: list[list[int]] = []
+    annot_colors: list[int | None] = []
 
     for col_idx, (name, attr_type) in enumerate(zip(attribute_names, attribute_types)):
         if attr_type != "hex-binary":
             annot_point_ids.append([])
+            annot_colors.append(None)
             continue
 
         print(f"Processing hex-binary attribute '{name}' (column {col_idx})...")
@@ -91,10 +93,16 @@ def add_annotated_point_ids(zarr_path: str | Path) -> None:
                     seen_tracks.add(tid)
                     representative_point_ids.append(pid)
 
+        # Extract tissue color (all annotated cells share the same hex color for hex-binary)
+        annotated_values = attr_data[mask]
+        tissue_color = int(annotated_values[0]) if len(annotated_values) > 0 else None
+        annot_colors.append(tissue_color)
+
         print(f"  → {len(seen_tracks)} annotated tracks found")
         annot_point_ids.append(representative_point_ids)
 
     attributes.attrs["annot_point_ids"] = annot_point_ids
+    attributes.attrs["annot_colors"] = annot_colors
     print(f"Saved annot_point_ids to {zarr_path / 'attributes' / '.zattrs'}")
 
 

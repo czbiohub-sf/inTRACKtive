@@ -9,6 +9,7 @@ import {
     NormalBlending,
     PerspectiveCamera,
     Points,
+    Raycaster,
     Scene,
     ShaderMaterial,
     SRGBColorSpace,
@@ -100,6 +101,7 @@ export class PointCanvas {
     colormapCellsContinuous: string = defaultColormapColorbyContinuous;
     currentAttributes: number[] | Float32Array = new Float32Array();
     currentFatemapAttributes: Float32Array | null = null;
+    private readonly raycaster: Raycaster;
     private previousNumValues: number | undefined = undefined;
 
     constructor(width: number, height: number) {
@@ -189,6 +191,9 @@ export class PointCanvas {
         } else {
             this.setSelectionMode(PointSelectionMode.BOX);
         }
+
+        this.raycaster = new Raycaster();
+        this.raycaster.params.Points = { threshold: 0.02 };
     }
 
     shallowCopy(): PointCanvas {
@@ -369,6 +374,13 @@ export class PointCanvas {
 
     clearPointIndicesCache() {
         this.pointIndicesCache.clear();
+    }
+
+    getHoveredCellIndex(ndcX: number, ndcY: number): number | null {
+        this.raycaster.setFromCamera(new Vector2(ndcX, ndcY), this.camera);
+        const intersects = this.raycaster.intersectObject(this.points);
+        if (intersects.length === 0) return null;
+        return intersects[0].index ?? null;
     }
 
     highlightPoints(points: number[]) {
@@ -554,8 +566,12 @@ export class PointCanvas {
     }
 
     normalizeAttributeVector(attributes: number[] | Float32Array): number[] | Float32Array {
-        const min = Math.min(...attributes);
-        const max = Math.max(...attributes);
+        let min = Infinity,
+            max = -Infinity;
+        for (let i = 0; i < attributes.length; i++) {
+            if (attributes[i] < min) min = attributes[i];
+            if (attributes[i] > max) max = attributes[i];
+        }
         const range = max - min;
 
         // Avoid division by zero in case all values are the same
@@ -725,6 +741,7 @@ export class PointCanvas {
         this.selectedPointIndices = [];
         this.fetchedRootTrackIds.clear();
         this.fetchedPointIds.clear();
+        this.pointBrightness = 1.0;
         for (const trackID of this.tracks.keys()) {
             this.removeTrack(trackID);
         }
