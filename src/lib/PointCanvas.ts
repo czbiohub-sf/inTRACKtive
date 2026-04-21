@@ -158,7 +158,7 @@ export class PointCanvas {
         // this.scene.add(new AxesHelper(0.2));
         this.setupAxesHelper();
         // if (deviceState.current.isPhone) {
-            this.toggleAxesHelper();
+        this.toggleAxesHelper();
         // }
 
         this.scene.add(this.points);
