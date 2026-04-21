@@ -157,9 +157,9 @@ export class PointCanvas {
 
         // this.scene.add(new AxesHelper(0.2));
         this.setupAxesHelper();
-        if (deviceState.current.isPhone) {
+        // if (deviceState.current.isPhone) {
             this.toggleAxesHelper();
-        }
+        // }
 
         this.scene.add(this.points);
         this.scene.fog = new FogExp2(0x000000, 0.0005); // default is 0.00025
