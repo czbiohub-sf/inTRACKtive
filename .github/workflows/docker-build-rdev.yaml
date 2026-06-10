@@ -3,6 +3,11 @@ name: Docker Image Build - rdev
 
 on:
   push:
+    branches-ignore:
+      - main
+      - release-please--branches--main
+    paths-ignore:
+      - ".infra/**"
   pull_request:
     types: [labeled]
 

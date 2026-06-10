@@ -2,7 +2,11 @@
 name: Docker Image Build - staging/prod
 
 on:
-  - push
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - ".infra/**"
 
 jobs:
   staging_prod_argus_builder:
