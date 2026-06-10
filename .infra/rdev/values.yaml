@@ -3,4 +3,4 @@ stack:
   services:
     web:
       image:
-        tag: sha-TO-BE-REPLACED-BY-BUILDER-WORKFLOW
+        tag: sha-5dab1fa
