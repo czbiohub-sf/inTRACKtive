@@ -1,0 +1,42 @@
+###### Generated using `argus bootstrap` command ######
+stack:
+  global:
+    replicaCount: 1
+    autoscaling:
+      enabled: false
+    service:
+      port: 3000
+    nodeSelector:
+      kubernetes.io/arch: amd64
+
+  services:
+    web:
+      image:
+        repository: 533267185808.dkr.ecr.us-west-2.amazonaws.com/core-platform/intracktive/web
+      resources:
+        limits:
+          cpu: 500m
+          memory: 500Mi
+        requests:
+          cpu: 500m
+          memory: 500Mi
+      ingress:
+        paths:
+          - path: /
+            pathType: Prefix
+      livenessProbe:
+        httpGet:
+          path: /api/health
+          port: 3000
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        timeoutSeconds: 10
+        failureThreshold: 3
+      readinessProbe:
+        httpGet:
+          path: /api/health
+          port: 3000
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        timeoutSeconds: 10
+        failureThreshold: 3

@@ -1,0 +1,15 @@
+###### Generated using `argus bootstrap` command ######
+stack:
+  services:
+    web:
+      image:
+        tag: sha-TO-BE-REPLACED-BY-BUILDER-WORKFLOW
+      ingress:
+        rules:
+          - host: intracktive.sf.czbiohub.org
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 4
+        targetCPUUtilizationPercentage: 70
+        targetMemoryUtilizationPercentage: 70
