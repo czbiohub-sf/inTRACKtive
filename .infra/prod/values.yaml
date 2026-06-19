@@ -3,7 +3,7 @@ stack:
   services:
     web:
       image:
-        tag: sha-TO-BE-REPLACED-BY-BUILDER-WORKFLOW
+        tag: sha-3f8e70e
       ingress:
         rules:
           - host: intracktive.sf.czbiohub.org
