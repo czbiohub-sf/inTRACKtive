@@ -1,0 +1,29 @@
+###### Generated using `argus bootstrap` command ######
+name: Docker Image Build - staging/prod
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - ".infra/**"
+
+jobs:
+  staging_prod_argus_builder:
+    uses: chanzuckerberg/github-actions/.github/workflows/argus-docker-build.yaml@v6
+    secrets: inherit
+    with:
+      envs: staging,prod
+      path_filters: "!.infra/**"
+      branches_include: main
+      force_update_manifests: true
+      arm_runner_labels: "['ubuntu-latest']"
+      amd_runner_labels: "['ubuntu-latest']"
+      images: |
+        {
+          "web": {
+            "context": "./",
+            "dockerfile": "Dockerfile",
+            "platform": "linux/amd64"
+          }
+        }

@@ -244,6 +244,17 @@ Of course, any other setting can be personalized by cloning the repo and changin
 
 </details><br/>
 
+# Deployment
+
+The web app is deployed to Argus as a static Vite build served by Nginx.
+
+```bash
+docker build -t intracktive .
+docker run --rm -p 3000:3000 intracktive
+```
+
+The container exposes `/api/health` for Argus readiness and liveness probes.
+
 
 
 
