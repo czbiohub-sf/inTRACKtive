@@ -50,6 +50,17 @@ function ColormapSelect({ value, options, onChange }: ColormapSelectProps) {
 
 const allowColorByAttribute = config.permission.allowColorByAttribute;
 
+// Sentinel option representing "no second tissue" in the second-tissue dropdown.
+// Module-scoped so its reference identity is stable across renders (the SDS Dropdown
+// compares options by reference).
+const NONE_OPTION: Option = {
+    name: "None",
+    label: -1,
+    type: "default",
+    action: "default",
+    numCategorical: undefined,
+};
+
 interface TrackControlsProps {
     trackManager: TrackManager | null;
     trackHighlightLength: number;
@@ -71,6 +82,8 @@ interface TrackControlsProps {
     toggleColorBy: (colorBy: boolean) => void;
     colorByEvent: Option;
     changeColorBy: (value: Option) => void;
+    colorBySecondEvent: Option | null;
+    changeSecondColorBy: (value: Option | null) => void;
     colormapTracks: string;
     setColormapTracks: (name: string) => void;
     colormapCells: string;
@@ -80,6 +93,11 @@ interface TrackControlsProps {
 export default function TrackControls(props: TrackControlsProps) {
     const numTimes = props.trackManager?.points.shape[0] ?? 0;
     const dropDownOptions = props.trackManager?.attributeOptions ?? [];
+    // Options for the second tissue: only other hex-binary attributes, plus a "None" opt-out.
+    const secondHexOptions = [
+        NONE_OPTION,
+        ...dropDownOptions.filter((o) => o.type === "hex-binary" && o.label !== props.colorByEvent.label),
+    ];
 
     return (
         <Stack spacing={"1.1em"}>
@@ -178,6 +196,24 @@ export default function TrackControls(props: TrackControlsProps) {
                             if (typeof value === "string") return;
                             if (value instanceof Array) return;
                             props.changeColorBy(value);
+                        }}
+                    ></Dropdown>
+                </div>
+            )}
+
+            {/* Second tissue dropdown (only for hex-binary, when another hex-binary attribute exists) */}
+            {props.colorBy && props.colorByEvent.type === "hex-binary" && secondHexOptions.length > 1 && (
+                <div>
+                    <Dropdown
+                        label={`Second tissue: ${props.colorBySecondEvent?.name ?? "None"}`}
+                        options={secondHexOptions}
+                        value={props.colorBySecondEvent ?? NONE_OPTION}
+                        onChange={(_, value) => {
+                            console.debug("Second tissue Dropdown::onChange", value);
+                            if (value === null) return;
+                            if (typeof value === "string") return;
+                            if (value instanceof Array) return;
+                            props.changeSecondColorBy(value === NONE_OPTION ? null : value);
                         }}
                     ></Dropdown>
                 </div>

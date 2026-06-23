@@ -411,6 +411,14 @@ export default function App() {
                     );
                 }
 
+                let secondaryAttributes: Float32Array | undefined;
+                if (canvas.colorBySecondEvent && canvas.colorByEvent.type === "hex-binary") {
+                    secondaryAttributes = await trackManager.fetchAttributesAtTime(
+                        time,
+                        canvas.colorBySecondEvent.label - numberOfDefaultColorByOptions,
+                    );
+                }
+
                 if (ignore) {
                     console.debug("IGNORE SET points at time %d (after fatemap fetch)", time);
                     return;
@@ -419,7 +427,13 @@ export default function App() {
                 // clearing the timeout prevents the loading indicator from showing at all if the fetch is fast
                 clearTimeout(loadingTimeout);
                 setIsLoadingPoints(false);
-                dispatchCanvas({ type: ActionType.POINTS_POSITIONS, positions: data, attributes, fatemapAttributes });
+                dispatchCanvas({
+                    type: ActionType.POINTS_POSITIONS,
+                    positions: data,
+                    attributes,
+                    fatemapAttributes,
+                    secondaryAttributes,
+                });
             };
             getPoints(canvas.curTime);
         } else {
@@ -437,7 +451,7 @@ export default function App() {
             clearTimeout(loadingTimeout);
             ignore = true;
         };
-    }, [canvas.curTime, canvas.colorByEvent, dispatchCanvas, trackManager]);
+    }, [canvas.curTime, canvas.colorByEvent, canvas.colorBySecondEvent, dispatchCanvas, trackManager]);
 
     // This fetches track IDs based on the selected point IDs.
     useEffect(() => {
@@ -706,6 +720,7 @@ export default function App() {
                                 selectorScale={canvas.selector.sphereSelector.cursor.scale.x}
                                 colorBy={canvas.colorBy}
                                 colorByEvent={canvas.colorByEvent}
+                                colorBySecondEvent={canvas.colorBySecondEvent}
                                 onSelectBinaryValue={(pointIds: Set<number>) => {
                                     dispatchCanvas({
                                         type: ActionType.ADD_SELECTED_POINT_IDS,
@@ -764,6 +779,10 @@ export default function App() {
                                 colorByEvent={canvas.colorByEvent}
                                 changeColorBy={(option: Option) => {
                                     dispatchCanvas({ type: ActionType.CHANGE_COLOR_BY, option });
+                                }}
+                                colorBySecondEvent={canvas.colorBySecondEvent}
+                                changeSecondColorBy={(option: Option | null) => {
+                                    dispatchCanvas({ type: ActionType.CHANGE_SECOND_COLOR_BY, option });
                                 }}
                                 colormapTracks={canvas.colormapTracks}
                                 setColormapTracks={(colormapName: string) => {

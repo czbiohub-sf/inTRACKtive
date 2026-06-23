@@ -33,6 +33,7 @@ export class ViewerState {
     trackWidthFactor: number = 1;
     colorBy: boolean = false;
     colorByEvent: Option = DEFAULT_DROPDOWN_OPTION;
+    colorBySecondEvent: Option | null = null;
     colormapTracks: string = config.settings.colormap_tracks || "coolwarm";
     colormapCellsCategorical: string = config.settings.colormap_colorby_categorical;
     colormapCellsContinuous: string = config.settings.colormap_colorby_continuous;

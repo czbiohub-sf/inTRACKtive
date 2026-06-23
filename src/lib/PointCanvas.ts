@@ -96,11 +96,13 @@ export class PointCanvas {
     private pointIndicesCache: Map<number, number[]> = new Map();
     colorBy: boolean = false;
     colorByEvent: Option = DEFAULT_DROPDOWN_OPTION;
+    colorBySecondEvent: Option | null = null;
     colormapTracks: string = defaultColormapTracks;
     colormapCellsCategorical: string = defaultColormapColorbyCategorical;
     colormapCellsContinuous: string = defaultColormapColorbyContinuous;
     currentAttributes: number[] | Float32Array = new Float32Array();
     currentFatemapAttributes: Float32Array | null = null;
+    currentSecondaryAttributes: Float32Array | null = null;
     private readonly raycaster: Raycaster;
     private previousNumValues: number | undefined = undefined;
 
@@ -218,6 +220,7 @@ export class PointCanvas {
         state.trackWidthFactor = this.trackWidthFactor;
         state.colorBy = this.colorBy;
         state.colorByEvent = this.colorByEvent;
+        state.colorBySecondEvent = this.colorBySecondEvent;
         state.colormapTracks = this.colormapTracks;
         state.colormapCellsCategorical = this.colormapCellsCategorical;
         state.colormapCellsContinuous = this.colormapCellsContinuous;
@@ -253,6 +256,7 @@ export class PointCanvas {
         this.trackWidthFactor = state.trackWidthFactor ?? defaultState.trackWidthFactor;
         this.colorBy = state.colorBy ?? defaultState.colorBy;
         this.colorByEvent = state.colorByEvent ?? defaultState.colorByEvent;
+        this.colorBySecondEvent = state.colorBySecondEvent ?? null;
         this.colormapTracks = state.colormapTracks ?? defaultState.colormapTracks;
         this.colormapCellsCategorical = state.colormapCellsCategorical ?? defaultState.colormapCellsCategorical;
         this.colormapCellsContinuous = state.colormapCellsContinuous ?? defaultState.colormapCellsContinuous;
@@ -473,44 +477,79 @@ export class PointCanvas {
                 colorAttribute.setXYZ(i, color.r, color.g, color.b);
             }
         } else if (this.colorByEvent.type === "hex" || this.colorByEvent.type === "hex-binary") {
-            // For hex-binary with fatemap coloring: build a set of cell indices belonging to
-            // loaded tracks at the current timepoint. Computed inline to avoid stale selectedPointIndices
-            // (resetPointColors runs before updateSelectedPointIndices in POINTS_POSITIONS).
-            // Compute which cell indices belong to loaded tracks at this timepoint.
-            // Done whenever tracks exist — independent of fatemap availability —
-            // so that brightness contrast works for both Button 1 and Button 2.
-            let trackCellsAtCurrentTime: Set<number> | null = null;
-            if (this.colorByEvent.type === "hex-binary" && this.tracks.size > 0) {
-                trackCellsAtCurrentTime = new Set<number>();
-                const idOffset = this.curTime * this.maxPointsPerTimepoint;
-                for (const track of this.tracks.values()) {
-                    if (this.curTime < track.threeTrack.startTime || this.curTime > track.threeTrack.endTime) continue;
-                    const timeIndex = this.curTime - track.threeTrack.startTime;
-                    const pointId = track.threeTrack.pointIds[timeIndex];
-                    trackCellsAtCurrentTime.add(pointId - idOffset);
-                }
-            }
+            // When a second hex-binary tissue is selected, overlay the two tissues per cell.
+            // This mode runs without loaded tracks (selecting a second tissue clears them and
+            // disables track loading), so fatemap substitution and track-brightness logic are skipped.
+            const hasSecondary =
+                this.colorBySecondEvent !== null &&
+                this.currentSecondaryAttributes != null &&
+                this.currentSecondaryAttributes.length > 0;
 
-            for (let i = 0; i < numPoints; i++) {
-                let hexInt = attributes[i];
-                if (hexInt === undefined) {
-                    console.warn("Invalid hexInt value:", hexInt);
-                    continue;
+            if (hasSecondary) {
+                const secondary = this.currentSecondaryAttributes!;
+                for (let i = 0; i < numPoints; i++) {
+                    const a = attributes[i] ?? NO_ANNOTATION_VALUE;
+                    const b = secondary[i] ?? NO_ANNOTATION_VALUE;
+                    const aSpecified = a !== NO_ANNOTATION_VALUE;
+                    const bSpecified = b !== NO_ANNOTATION_VALUE;
+
+                    let hexInt: number;
+                    if (aSpecified && bSpecified) {
+                        hexInt = 0xffffff; // specified in both → white
+                    } else if (aSpecified) {
+                        hexInt = a;
+                    } else if (bSpecified) {
+                        hexInt = b;
+                    } else {
+                        hexInt = NO_ANNOTATION_VALUE; // specified in neither → grey
+                    }
+
+                    const hexStr = `#${hexInt.toString(16).padStart(6, "0").toUpperCase()}`;
+                    const color = new Color(hexStr);
+                    color.multiplyScalar(this.pointBrightness);
+                    colorAttribute.setXYZ(i, color.r, color.g, color.b);
                 }
-                // Grey cell in a loaded lineage track → substitute with fatemap_hex color (Button 2 only)
-                if (
-                    hexInt === NO_ANNOTATION_VALUE &&
-                    trackCellsAtCurrentTime?.has(i) &&
-                    this.currentFatemapAttributes !== null
-                ) {
-                    hexInt = this.currentFatemapAttributes[i] ?? NO_ANNOTATION_VALUE;
+            } else {
+                // For hex-binary with fatemap coloring: build a set of cell indices belonging to
+                // loaded tracks at the current timepoint. Computed inline to avoid stale selectedPointIndices
+                // (resetPointColors runs before updateSelectedPointIndices in POINTS_POSITIONS).
+                // Compute which cell indices belong to loaded tracks at this timepoint.
+                // Done whenever tracks exist — independent of fatemap availability —
+                // so that brightness contrast works for both Button 1 and Button 2.
+                let trackCellsAtCurrentTime: Set<number> | null = null;
+                if (this.colorByEvent.type === "hex-binary" && this.tracks.size > 0) {
+                    trackCellsAtCurrentTime = new Set<number>();
+                    const idOffset = this.curTime * this.maxPointsPerTimepoint;
+                    for (const track of this.tracks.values()) {
+                        if (this.curTime < track.threeTrack.startTime || this.curTime > track.threeTrack.endTime)
+                            continue;
+                        const timeIndex = this.curTime - track.threeTrack.startTime;
+                        const pointId = track.threeTrack.pointIds[timeIndex];
+                        trackCellsAtCurrentTime.add(pointId - idOffset);
+                    }
                 }
-                const hexStr = `#${hexInt.toString(16).padStart(6, "0").toUpperCase()}`;
-                const color = new Color(hexStr);
-                // Cells in loaded tracks stay at full brightness; others dim with pointBrightness
-                const brightness = trackCellsAtCurrentTime?.has(i) ? 1.0 : this.pointBrightness;
-                color.multiplyScalar(brightness);
-                colorAttribute.setXYZ(i, color.r, color.g, color.b);
+
+                for (let i = 0; i < numPoints; i++) {
+                    let hexInt = attributes[i];
+                    if (hexInt === undefined) {
+                        console.warn("Invalid hexInt value:", hexInt);
+                        continue;
+                    }
+                    // Grey cell in a loaded lineage track → substitute with fatemap_hex color (Button 2 only)
+                    if (
+                        hexInt === NO_ANNOTATION_VALUE &&
+                        trackCellsAtCurrentTime?.has(i) &&
+                        this.currentFatemapAttributes !== null
+                    ) {
+                        hexInt = this.currentFatemapAttributes[i] ?? NO_ANNOTATION_VALUE;
+                    }
+                    const hexStr = `#${hexInt.toString(16).padStart(6, "0").toUpperCase()}`;
+                    const color = new Color(hexStr);
+                    // Cells in loaded tracks stay at full brightness; others dim with pointBrightness
+                    const brightness = trackCellsAtCurrentTime?.has(i) ? 1.0 : this.pointBrightness;
+                    color.multiplyScalar(brightness);
+                    colorAttribute.setXYZ(i, color.r, color.g, color.b);
+                }
             }
         } else {
             const color = new Color();

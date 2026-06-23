@@ -20,6 +20,7 @@ interface CellControlsProps {
     selectorScale: number;
     colorBy: boolean;
     colorByEvent: Option;
+    colorBySecondEvent: Option | null;
     onSelectBinaryValue: (ids: Set<number>) => void;
     onLoadTissueTracks: () => void;
 }
@@ -73,9 +74,11 @@ export default function CellControls(props: CellControlsProps) {
                 (props.numSelectedTracks ?? 0) == 0 && (
                     <Tooltip
                         title={
-                            !props.trackManager.annotPointIds
-                                ? "Run add_annotations.py on this zarr to enable this feature"
-                                : ""
+                            props.colorBySecondEvent
+                                ? "Set the second tissue to None to load tracks (track view shows one tissue at a time)"
+                                : !props.trackManager.annotPointIds
+                                  ? "Run add_annotations.py on this zarr to enable this feature"
+                                  : ""
                         }
                     >
                         <span>
@@ -84,7 +87,7 @@ export default function CellControls(props: CellControlsProps) {
                                     sdsStyle="square"
                                     sdsType="primary"
                                     onClick={props.onLoadTissueTracks}
-                                    disabled={!props.trackManager.annotPointIds}
+                                    disabled={!props.trackManager.annotPointIds || !!props.colorBySecondEvent}
                                 >
                                     Load tissue tracks
                                 </Button>
@@ -92,7 +95,7 @@ export default function CellControls(props: CellControlsProps) {
                                     sdsStyle="square"
                                     sdsType="secondary"
                                     onClick={handleBinarySelection}
-                                    disabled={!props.trackManager.annotPointIds}
+                                    disabled={!props.trackManager.annotPointIds || !!props.colorBySecondEvent}
                                 >
                                     Load full lineage
                                 </Button>
