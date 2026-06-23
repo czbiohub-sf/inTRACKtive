@@ -610,13 +610,21 @@ export default function App() {
             const { trackID, track } = entry;
             const pointIndex = track.threeTrack.pointIds.indexOf(pointId);
             if (pointIndex === -1) return;
-            const positions = track.threeTrack.geometry.getAttribute("instanceStart");
+            // The track is a LineSegmentsGeometry: N points → N-1 segments, so
+            // instanceStart only has N-1 entries (one per segment start). The last
+            // point of a track has no instanceStart entry — read it from instanceEnd
+            // (the end vertex of the final segment) instead, otherwise it reads NaN.
+            const instanceStart = track.threeTrack.geometry.getAttribute("instanceStart");
+            const instanceEnd = track.threeTrack.geometry.getAttribute("instanceEnd");
+            const isLastPoint = pointIndex === track.threeTrack.pointIds.length - 1;
+            const positions = isLastPoint && pointIndex > 0 ? instanceEnd : instanceStart;
+            const posIndex = isLastPoint && pointIndex > 0 ? pointIndex - 1 : pointIndex;
             trackData.push([
                 trackID + 1,
                 time,
-                positions.getX(pointIndex),
-                positions.getY(pointIndex),
-                positions.getZ(pointIndex),
+                positions.getX(posIndex),
+                positions.getY(posIndex),
+                positions.getZ(posIndex),
                 track.parentTrackID,
             ]);
         });
