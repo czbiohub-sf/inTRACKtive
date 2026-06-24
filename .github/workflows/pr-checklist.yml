@@ -1,0 +1,81 @@
+name: PR Checklist
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, ready_for_review, synchronize]
+
+jobs:
+  check-checklist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR checklist
+        if: ${{ github.event.pull_request.user.type != 'Bot' }}
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          declare -A SECTION_RULES=(
+            ["Self-Review and Cleanup"]="all"
+            ["Correctness"]="all"
+            ["Code Quality"]="all"
+            ["Security"]="all"
+            ["Hygiene"]="all"
+            ["Testing"]="at_least_one"
+          )
+
+          SECTION_ORDER=(
+            "Self-Review and Cleanup"
+            "Correctness"
+            "Code Quality"
+            "Security"
+            "Hygiene"
+            "Testing"
+          )
+
+          FAILURES=()
+
+          for section in "${SECTION_ORDER[@]}"; do
+            rule="${SECTION_RULES[$section]}"
+
+            section_text=$(echo "$PR_BODY" | awk -v sec="### $section" '
+              $0 ~ sec { found=1; next }
+              /^### / && found { exit }
+              found { print }
+            ')
+
+            checked=$(echo "$section_text" | grep -cE '\- \[[xX]\]' || true)
+            unchecked=$(echo "$section_text" | grep -c '\- \[ \]' || true)
+            total=$((checked + unchecked))
+
+            if [[ "$total" -eq 0 ]]; then
+              FAILURES+=("$section: section not found or has no checkboxes")
+              continue
+            fi
+
+            if [[ "$rule" == "all" ]]; then
+              if [[ "$unchecked" -gt 0 ]]; then
+                FAILURES+=("$section: $checked/$total checked (all required)")
+              fi
+            elif [[ "$rule" == "at_least_one" ]]; then
+              if [[ "$checked" -eq 0 ]]; then
+                FAILURES+=("$section: 0/$total checked (at least 1 required)")
+              fi
+            fi
+          done
+
+          if [[ ${#FAILURES[@]} -eq 0 ]]; then
+            echo "All checklist sections passed."
+            for section in "${SECTION_ORDER[@]}"; do
+              echo "  OK $section"
+            done
+            exit 0
+          fi
+
+          echo "::error::PR checklist validation failed"
+          for fail in "${FAILURES[@]}"; do
+            echo "  FAIL $fail"
+          done
+
+          exit 1

@@ -4,7 +4,7 @@ name: Docker Image Build - staging/prod
 on:
   push:
     branches:
-      - main
+      - release-please--branches--main
     paths-ignore:
       - ".infra/**"
 
@@ -15,7 +15,7 @@ jobs:
     with:
       envs: staging,prod
       path_filters: "!.infra/**"
-      branches_include: main
+      branches_include: release-please--branches--main
       force_update_manifests: true
       arm_runner_labels: "['ubuntu-latest']"
       amd_runner_labels: "['ubuntu-latest']"
