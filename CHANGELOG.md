@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/czbiohub-sf/inTRACKtive/compare/v0.1.7...v0.1.8) (2026-07-08)
+
+
+### Misc
+
+* use ECR pull-through cache for Dockerfile base images ([#7](https://github.com/czbiohub-sf/inTRACKtive/issues/7)) ([4778c95](https://github.com/czbiohub-sf/inTRACKtive/commit/4778c95e975890113e5b9148e7858856d4db652c))
+
 ## [0.1.7](https://github.com/czbiohub-sf/inTRACKtive/compare/v0.1.6...v0.1.7) (2026-06-24)
 
 
