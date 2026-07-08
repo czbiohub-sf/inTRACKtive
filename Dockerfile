@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM 533267185808.dkr.ecr.us-west-2.amazonaws.com/docker.io/central/library/node:20-alpine AS build
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM 533267185808.dkr.ecr.us-west-2.amazonaws.com/docker.io/central/library/nginx:1.27-alpine
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
