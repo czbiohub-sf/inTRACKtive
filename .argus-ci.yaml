@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://chanzuckerberg.github.io/argus/schemas/argus-ci.schema.json
+version: 1
+
+apps:
+  intracktive:
+    build:
+      filters:
+        branches: ["!main"]
+      images:
+        web:
+          context: ./
+          dockerfile: ./Dockerfile
+          platform: linux/amd64
+    envs:
+      rdev: {}
+      staging: {}
+      prod: {}
