@@ -93,7 +93,7 @@ export default function DataControls(props: DataControlsProps) {
             <Tooltip title="More info">
                 <Button
                     icon="InfoCircle"
-                    sdsSize="medium"
+                    sdsSize="large"
                     sdsType="secondary"
                     sdsStyle="icon"
                     onClick={() => {
@@ -111,7 +111,7 @@ export default function DataControls(props: DataControlsProps) {
             <Tooltip title="Refresh page to initial settings">
                 <Button
                     icon="Refresh"
-                    sdsSize="medium"
+                    sdsSize="large"
                     sdsType="secondary"
                     sdsStyle="icon"
                     onClick={refreshPageCallBack}
@@ -122,7 +122,7 @@ export default function DataControls(props: DataControlsProps) {
                 <span>
                     <Button
                         icon="Share"
-                        sdsSize="medium"
+                        sdsSize="large"
                         sdsType="secondary"
                         sdsStyle="icon"
                         disabled={!props.trackManager}
@@ -152,7 +152,7 @@ export default function DataControls(props: DataControlsProps) {
             <Tooltip title="Change link to another dataset">
                 <Button
                     icon="GlobeBasic"
-                    sdsSize="medium"
+                    sdsSize="large"
                     sdsStyle="icon"
                     sdsType="secondary"
                     onClick={showUrlPopover}
