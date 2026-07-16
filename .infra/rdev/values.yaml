@@ -3,4 +3,4 @@ stack:
   services:
     web:
       image:
-        tag: sha-df8cebb
+        tag: sha-4a7b0ee
