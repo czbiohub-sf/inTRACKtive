@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.9](https://github.com/czbiohub-sf/inTRACKtive/compare/v0.1.8...v0.1.9) (2026-07-17)
+
+
+### Bug Fixes
+
+* **sidebar:** make data control icons slightly smaller ([#13](https://github.com/czbiohub-sf/inTRACKtive/issues/13)) ([e278cb6](https://github.com/czbiohub-sf/inTRACKtive/commit/e278cb6604afcbb6dcdb1c4fe484819aa9cf7a45))
+
+
+### Misc
+
+* migrate to Argus CI Orchestrator ([#9](https://github.com/czbiohub-sf/inTRACKtive/issues/9)) ([434f83a](https://github.com/czbiohub-sf/inTRACKtive/commit/434f83ab4a5992fbdc60fd104d00ce655ecbc13e))
+* register argus-docker-build-dispatch workflow ([#10](https://github.com/czbiohub-sf/inTRACKtive/issues/10)) ([dc3ef1c](https://github.com/czbiohub-sf/inTRACKtive/commit/dc3ef1ca3207043864a29e81860c06aec4fa0506))
+* remove obsolete helm-dep-update workflow ([#12](https://github.com/czbiohub-sf/inTRACKtive/issues/12)) ([75ebe76](https://github.com/czbiohub-sf/inTRACKtive/commit/75ebe76550668d34023fb482b752a953142ceac8))
+
 ## [0.1.8](https://github.com/czbiohub-sf/inTRACKtive/compare/v0.1.7...v0.1.8) (2026-07-08)
 
 
