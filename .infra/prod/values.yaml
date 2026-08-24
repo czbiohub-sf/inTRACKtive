@@ -3,7 +3,7 @@ stack:
   services:
     web:
       image:
-        tag: sha-9145c1a
+        tag: sha-059e64d
       ingress:
         rules:
           - host: intracktive.sf.czbiohub.org
