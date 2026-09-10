@@ -4,9 +4,6 @@ stack:
     web:
       image:
         tag: sha-9145c1a
-      ingress:
-        rules:
-          - host: intracktive.sf.czbiohub.org
       autoscaling:
         enabled: true
         minReplicas: 2
