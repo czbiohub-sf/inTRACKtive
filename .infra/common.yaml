@@ -20,7 +20,8 @@ stack:
         requests:
           cpu: 500m
           memory: 500Mi
-      ingress:
+      gateway:
+        enabled: true
         paths:
           - path: /
             pathType: Prefix
