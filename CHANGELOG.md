@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.2.0](https://github.com/czbiohub-sf/inTRACKtive/compare/v0.1.8...v0.2.0) (2026-11-24)
+
+
+### Features
+
+* **infra:** migrate intracktive to Envoy Gateway, drop the Vercel-served host ([#28](https://github.com/czbiohub-sf/inTRACKtive/issues/28)) ([48fb891](https://github.com/czbiohub-sf/inTRACKtive/commit/48fb891a4f4b7f42eea15a340bc2a86c62b23281))
+
+
+### Bug Fixes
+
+* **sidebar:** make data control icons slightly smaller ([#13](https://github.com/czbiohub-sf/inTRACKtive/issues/13)) ([e278cb6](https://github.com/czbiohub-sf/inTRACKtive/commit/e278cb6604afcbb6dcdb1c4fe484819aa9cf7a45))
+
+
+### Misc
+
+* migrate to Argus CI Orchestrator ([#9](https://github.com/czbiohub-sf/inTRACKtive/issues/9)) ([434f83a](https://github.com/czbiohub-sf/inTRACKtive/commit/434f83ab4a5992fbdc60fd104d00ce655ecbc13e))
+* record royerlab upstream as merged ([3349b41](https://github.com/czbiohub-sf/inTRACKtive/commit/3349b41cbd909e7dacf6d5563fd6f169a73e32b0))
+* register argus-docker-build-dispatch workflow ([#10](https://github.com/czbiohub-sf/inTRACKtive/issues/10)) ([dc3ef1c](https://github.com/czbiohub-sf/inTRACKtive/commit/dc3ef1ca3207043864a29e81860c06aec4fa0506))
+* remove obsolete helm-dep-update workflow ([#12](https://github.com/czbiohub-sf/inTRACKtive/issues/12)) ([75ebe76](https://github.com/czbiohub-sf/inTRACKtive/commit/75ebe76550668d34023fb482b752a953142ceac8))
+* sync with royerlab upstream (vite 6, vitest 4, dependabot fixes) ([#31](https://github.com/czbiohub-sf/inTRACKtive/issues/31)) ([8a122fe](https://github.com/czbiohub-sf/inTRACKtive/commit/8a122fe1c8761d88f69fe7dedc06ac7cf5fbfb50))
+* update 'stack' helm chart version for intracktive prod ([#27](https://github.com/czbiohub-sf/inTRACKtive/issues/27)) ([5fd53e7](https://github.com/czbiohub-sf/inTRACKtive/commit/5fd53e7e9e6f97ecf879e034cb1b84f9a862501e))
+* update 'stack' helm chart version for intracktive prod ([#33](https://github.com/czbiohub-sf/inTRACKtive/issues/33)) ([ddb9f4e](https://github.com/czbiohub-sf/inTRACKtive/commit/ddb9f4e069ed43149f7fbc52056f7a68b74cac7c))
+* update 'stack' helm chart version for intracktive rdev ([#30](https://github.com/czbiohub-sf/inTRACKtive/issues/30)) ([62fb034](https://github.com/czbiohub-sf/inTRACKtive/commit/62fb034fc1ac0722934c985de5cb2006d9efd67f))
+* update 'stack' helm chart version for intracktive rdev ([#32](https://github.com/czbiohub-sf/inTRACKtive/issues/32)) ([70f277b](https://github.com/czbiohub-sf/inTRACKtive/commit/70f277b073f62b09e7186d916a4904c18d84f14e))
+* update 'stack' helm chart version for intracktive staging ([#29](https://github.com/czbiohub-sf/inTRACKtive/issues/29)) ([2f2c402](https://github.com/czbiohub-sf/inTRACKtive/commit/2f2c402493f0eecef0540750d739caa56a9f0bac))
+
 ## [0.1.8](https://github.com/czbiohub-sf/inTRACKtive/compare/v0.1.7...v0.1.8) (2026-07-08)
 
 

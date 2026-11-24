@@ -3,7 +3,7 @@ stack:
   services:
     web:
       image:
-        tag: sha-9145c1a
+        tag: sha-eac6651
       autoscaling:
         enabled: true
         minReplicas: 2
